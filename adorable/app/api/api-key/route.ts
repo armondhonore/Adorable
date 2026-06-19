@@ -6,7 +6,11 @@ const COOKIE_PROVIDER = "user-api-provider";
 
 /** Check if a global API key is configured in the environment */
 function hasGlobalKey(): boolean {
-  return !!(process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY);
+  return !!(
+    process.env.OPENAI_API_KEY ||
+    process.env.ANTHROPIC_API_KEY ||
+    process.env.LLM_PROVIDER === "nexlayer"
+  );
 }
 
 /** GET – returns whether the user needs to provide a key */
@@ -26,8 +30,9 @@ export async function GET() {
 export async function POST(req: Request) {
   const body = (await req.json()) as {
     apiKey?: string;
-    provider?: "openai" | "anthropic";
+    provider?: "openai" | "anthropic" | "nexlayer";
     action?: "save" | "delete";
+    accessCode?: string;
   };
 
   const jar = await cookies();
@@ -45,8 +50,23 @@ export async function POST(req: Request) {
 
   const provider = body.provider ?? "openai";
 
-  // Basic validation
-  if (provider === "openai" && !apiKey.startsWith("sk-")) {
+  // Nexlayer bypass — validate 6-digit access code, no real API key needed
+  if (provider === "nexlayer") {
+    const expectedCode = process.env.NEXLAYER_ACCESS_CODE;
+    if (!expectedCode) {
+      return NextResponse.json(
+        { error: "Nexlayer access not configured" },
+        { status: 503 },
+      );
+    }
+    const submitted = body.accessCode?.trim();
+    if (!submitted || submitted !== expectedCode) {
+      return NextResponse.json(
+        { error: "Invalid access code" },
+        { status: 401 },
+      );
+    }
+  } else if (provider === "openai" && !apiKey.startsWith("sk-")) {
     return NextResponse.json(
       { error: "OpenAI keys start with sk-" },
       { status: 400 },

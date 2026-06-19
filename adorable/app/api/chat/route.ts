@@ -68,7 +68,9 @@ export async function POST(req: Request) {
   const userProvider = jar.get("user-api-provider")?.value;
 
   const hasGlobalKey = !!(
-    process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY
+    process.env.OPENAI_API_KEY ||
+    process.env.ANTHROPIC_API_KEY ||
+    process.env.LLM_PROVIDER === "nexlayer"
   );
 
   // If no global key and no user key, reject

@@ -72,6 +72,7 @@ application:
         LLM_PROVIDER: nexlayer
         VLLM_BASE_URL: "# filled by platform agent"
         NEXLAYER_MODEL: bode-flagship
+        NEXLAYER_ACCESS_CODE: "# set to your 6-digit code"
 ```
 
 ## Notes
@@ -82,3 +83,4 @@ application:
 - `adorable/` has no `public/` directory — the runner stage creates an empty one
 - `LLM_PROVIDER=nexlayer` routes to vLLM at `VLLM_BASE_URL/v1` using `@ai-sdk/openai` with `apiKey: "EMPTY"` (vLLM convention)
 - `VLLM_BASE_URL` and `NEXLAYER_MODEL` must be set by the platform agent pointing at the bode-flagship deployment
+- `NEXLAYER_ACCESS_CODE` must be set to the 6-digit code posted at https://www.linkedin.com/feed/update/urn:li:activity:7473497952548999168/ — the gate rejects any other value

@@ -22,7 +22,7 @@ import {
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type Provider = "openai" | "anthropic";
+type Provider = "openai" | "anthropic" | "nexlayer";
 
 type ApiKeyStatus = {
   hasGlobalKey: boolean;
@@ -81,22 +81,34 @@ export function ApiKeyGate({ children }: { children: React.ReactNode }) {
 function ApiKeySetupScreen({ onSaved }: { onSaved: () => void }) {
   const [provider, setProvider] = React.useState<Provider>("openai");
   const [apiKey, setApiKey] = React.useState("");
+  const [accessCode, setAccessCode] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
 
   const handleSave = async () => {
-    const key = apiKey.trim();
-    if (!key) {
-      setError("Please enter an API key");
-      return;
-    }
     setError(null);
     setSaving(true);
     try {
+      const body =
+        provider === "nexlayer"
+          ? { apiKey: "nexlayer", provider: "nexlayer", accessCode: accessCode.trim() }
+          : { apiKey: apiKey.trim(), provider };
+
+      if (provider !== "nexlayer" && !apiKey.trim()) {
+        setError("Please enter an API key");
+        setSaving(false);
+        return;
+      }
+      if (provider === "nexlayer" && accessCode.trim().length !== 6) {
+        setError("Code must be exactly 6 digits");
+        setSaving(false);
+        return;
+      }
+
       const res = await fetch("/api/api-key", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ apiKey: key, provider }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -105,10 +117,17 @@ function ApiKeySetupScreen({ onSaved }: { onSaved: () => void }) {
       }
       onSaved();
     } catch {
-      setError("Failed to save API key");
+      setError("Failed to connect");
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleProviderSwitch = (p: Provider) => {
+    setProvider(p);
+    setError(null);
+    setApiKey("");
+    setAccessCode("");
   };
 
   return (
@@ -139,10 +158,7 @@ function ApiKeySetupScreen({ onSaved }: { onSaved: () => void }) {
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  setProvider("openai");
-                  setError(null);
-                }}
+                onClick={() => handleProviderSwitch("openai")}
                 className={`flex-1 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
                   provider === "openai"
                     ? "border-foreground/20 bg-foreground/5 text-foreground"
@@ -153,10 +169,7 @@ function ApiKeySetupScreen({ onSaved }: { onSaved: () => void }) {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setProvider("anthropic");
-                  setError(null);
-                }}
+                onClick={() => handleProviderSwitch("anthropic")}
                 className={`flex-1 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
                   provider === "anthropic"
                     ? "border-foreground/20 bg-foreground/5 text-foreground"
@@ -165,27 +178,76 @@ function ApiKeySetupScreen({ onSaved }: { onSaved: () => void }) {
               >
                 Anthropic
               </button>
+              <button
+                type="button"
+                onClick={() => handleProviderSwitch("nexlayer")}
+                className={`flex-1 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
+                  provider === "nexlayer"
+                    ? "border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                    : "border-border text-muted-foreground hover:border-blue-500/20 hover:text-blue-500"
+                }`}
+              >
+                Nexlayer
+              </button>
             </div>
           </div>
 
-          {/* Key input */}
+          {/* Input field — varies by provider */}
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-              API key
-            </label>
-            <Input
-              type="password"
-              value={apiKey}
-              onChange={(e) => {
-                setApiKey(e.target.value);
-                setError(null);
-              }}
-              placeholder={provider === "openai" ? "sk-..." : "sk-ant-..."}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void handleSave();
-              }}
-              autoFocus
-            />
+            {provider === "nexlayer" ? (
+              <>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  Access code
+                </label>
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  value={accessCode}
+                  onChange={(e) => {
+                    setAccessCode(e.target.value.replace(/\D/g, ""));
+                    setError(null);
+                  }}
+                  placeholder="6-digit code"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void handleSave();
+                  }}
+                  autoFocus
+                />
+                <p className="mt-1.5 text-[13px] text-muted-foreground">
+                  Don&apos;t have the code?{" "}
+                  <a
+                    href="https://www.linkedin.com/feed/update/urn:li:activity:7473497952548999168/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-0.5 text-blue-500 hover:underline"
+                  >
+                    Get it from this post
+                    <ExternalLinkIcon className="size-3" />
+                  </a>
+                </p>
+              </>
+            ) : (
+              <>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                  API key
+                </label>
+                <Input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => {
+                    setApiKey(e.target.value);
+                    setError(null);
+                  }}
+                  placeholder={provider === "openai" ? "sk-..." : "sk-ant-..."}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void handleSave();
+                  }}
+                  autoFocus
+                />
+              </>
+            )}
             {error && (
               <p className="mt-1.5 text-[13px] text-destructive">{error}</p>
             )}
@@ -195,7 +257,12 @@ function ApiKeySetupScreen({ onSaved }: { onSaved: () => void }) {
           <Button
             className="w-full"
             onClick={handleSave}
-            disabled={saving || !apiKey.trim()}
+            disabled={
+              saving ||
+              (provider === "nexlayer"
+                ? accessCode.length !== 6
+                : !apiKey.trim())
+            }
           >
             {saving ? (
               <Loader2Icon className="size-4 animate-spin" />
@@ -204,28 +271,30 @@ function ApiKeySetupScreen({ onSaved }: { onSaved: () => void }) {
             )}
           </Button>
 
-          {/* Get key links */}
-          <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
-            <a
-              href="https://platform.openai.com/api-keys"
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 transition-colors hover:text-foreground"
-            >
-              Get OpenAI key
-              <ExternalLinkIcon className="size-3" />
-            </a>
-            <span className="text-muted-foreground/30">·</span>
-            <a
-              href="https://console.anthropic.com/settings/keys"
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 transition-colors hover:text-foreground"
-            >
-              Get Anthropic key
-              <ExternalLinkIcon className="size-3" />
-            </a>
-          </div>
+          {/* Get key links — only for OpenAI/Anthropic */}
+          {provider !== "nexlayer" && (
+            <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
+              <a
+                href="https://platform.openai.com/api-keys"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 transition-colors hover:text-foreground"
+              >
+                Get OpenAI key
+                <ExternalLinkIcon className="size-3" />
+              </a>
+              <span className="text-muted-foreground/30">·</span>
+              <a
+                href="https://console.anthropic.com/settings/keys"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 transition-colors hover:text-foreground"
+              >
+                Get Anthropic key
+                <ExternalLinkIcon className="size-3" />
+              </a>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -295,7 +364,6 @@ export function ApiKeySettingsDialog() {
         body: JSON.stringify({ action: "delete" }),
       });
       setOpen(false);
-      // Reload to trigger the gate check
       window.location.reload();
     } catch {
       // ignore
