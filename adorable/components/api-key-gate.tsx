@@ -30,6 +30,43 @@ type ApiKeyStatus = {
 };
 
 /* ------------------------------------------------------------------ */
+/*  Funny block messages — shown when user tries OpenAI / Anthropic   */
+/* ------------------------------------------------------------------ */
+
+const FUNNY_MESSAGES = [
+  {
+    heading: "Sorry Mario...",
+    body: "Our princess is in another castle 🍄",
+    gif: null,
+  },
+  {
+    heading: "Ah ah ah!",
+    body: "You didn't say the magic word.",
+    gif: "https://media4.giphy.com/media/v1.Y2lkPTZjMDliOTUyM2U5dmRoZnU1NHgybnEzYmZjYmJuZ3FkcmFyMnN2aGV1ZzY3aDg1ZSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3ohzdQ1IynzclJldUQ/source.gif",
+  },
+  {
+    heading: "Not today 🙅",
+    body: "Nexlayer access codes only around here.",
+    gif: null,
+  },
+  {
+    heading: "Not on my watch ⌚",
+    body: "Those keys belong in another castle.",
+    gif: null,
+  },
+  {
+    heading: "Show me the money! 💸",
+    body: "...just kidding. Nexlayer access code, please.",
+    gif: null,
+  },
+  {
+    heading: "We're going to Disney World! 🏰",
+    body: "But first — enter your Nexlayer access code.",
+    gif: null,
+  },
+] as const;
+
+/* ------------------------------------------------------------------ */
 /*  Gate – shown when no API key is configured anywhere                */
 /* ------------------------------------------------------------------ */
 
@@ -45,7 +82,6 @@ export function ApiKeyGate({ children }: { children: React.ReactNode }) {
         setStatus(data);
       }
     } catch {
-      // fail open if we can't reach the endpoint
       setStatus({ hasGlobalKey: true, hasUserKey: false, provider: "openai" });
     } finally {
       setLoading(false);
@@ -64,12 +100,10 @@ export function ApiKeyGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // If there's a global key OR the user already saved one, render the app
   if (status?.hasGlobalKey || status?.hasUserKey) {
     return <>{children}</>;
   }
 
-  // Otherwise show setup screen
   return <ApiKeySetupScreen onSaved={checkStatus} />;
 }
 
@@ -78,40 +112,40 @@ export function ApiKeyGate({ children }: { children: React.ReactNode }) {
 /* ------------------------------------------------------------------ */
 
 function ApiKeySetupScreen({ onSaved }: { onSaved: () => void }) {
-  const [provider, setProvider] = React.useState<Provider>("openai");
-  const [apiKey, setApiKey] = React.useState("");
   const [accessCode, setAccessCode] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
 
+  // Funny block modal state
+  const [blockedOpen, setBlockedOpen] = React.useState(false);
+  const [blockedMsg, setBlockedMsg] = React.useState<(typeof FUNNY_MESSAGES)[number] | null>(null);
+
+  const handleBlockedProviderClick = () => {
+    const msg = FUNNY_MESSAGES[Math.floor(Math.random() * FUNNY_MESSAGES.length)];
+    setBlockedMsg(msg);
+    setBlockedOpen(true);
+  };
+
   const handleSave = async () => {
+    if (!accessCode.trim()) {
+      setError("Please enter the access code");
+      return;
+    }
     setError(null);
     setSaving(true);
     try {
-      const body =
-        provider === "nexlayer"
-          ? { apiKey: "nexlayer", provider: "nexlayer", accessCode: accessCode.trim() }
-          : { apiKey: apiKey.trim(), provider };
-
-      if (provider !== "nexlayer" && !apiKey.trim()) {
-        setError("Please enter an API key");
-        setSaving(false);
-        return;
-      }
-      if (provider === "nexlayer" && !accessCode.trim()) {
-        setError("Please enter the access code");
-        setSaving(false);
-        return;
-      }
-
       const res = await fetch("/api/api-key", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          apiKey: "nexlayer",
+          provider: "nexlayer",
+          accessCode: accessCode.trim(),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Failed to save");
+        setError(data.error ?? "Invalid access code");
         return;
       }
       onSaved();
@@ -122,21 +156,13 @@ function ApiKeySetupScreen({ onSaved }: { onSaved: () => void }) {
     }
   };
 
-  const handleProviderSwitch = (p: Provider) => {
-    setProvider(p);
-    setError(null);
-    setApiKey("");
-    setAccessCode("");
-  };
-
   return (
     <div className="flex h-full items-center justify-center bg-background">
       <div className="mx-auto w-full max-w-md space-y-8 px-6">
-        {/* Nexlayer branding + key icon */}
+        {/* Nexlayer branding */}
         <div className="flex flex-col items-center gap-4 text-center">
           <div className="flex flex-col items-center gap-2">
             <div className="flex size-14 items-center justify-center rounded-2xl bg-[#22b7cb]/10">
-              {/* Nexlayer geometric icon mark */}
               <svg
                 viewBox="0 0 527 497"
                 className="size-8"
@@ -171,109 +197,73 @@ function ApiKeySetupScreen({ onSaved }: { onSaved: () => void }) {
               Provider
             </label>
             <div className="flex gap-2">
+              {/* OpenAI — blocked */}
               <button
                 type="button"
-                onClick={() => handleProviderSwitch("openai")}
-                className={`flex-1 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
-                  provider === "openai"
-                    ? "border-foreground/20 bg-foreground/5 text-foreground"
-                    : "border-border text-muted-foreground hover:border-foreground/20 hover:text-foreground"
-                }`}
+                onClick={handleBlockedProviderClick}
+                className="flex-1 rounded-lg border border-border px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground"
               >
                 OpenAI
               </button>
+              {/* Anthropic — blocked */}
               <button
                 type="button"
-                onClick={() => handleProviderSwitch("anthropic")}
-                className={`flex-1 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
-                  provider === "anthropic"
-                    ? "border-foreground/20 bg-foreground/5 text-foreground"
-                    : "border-border text-muted-foreground hover:border-foreground/20 hover:text-foreground"
-                }`}
+                onClick={handleBlockedProviderClick}
+                className="flex-1 rounded-lg border border-border px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground"
               >
                 Anthropic
               </button>
+              {/* Nexlayer — the only real option */}
               <button
                 type="button"
-                onClick={() => handleProviderSwitch("nexlayer")}
-                className={`flex-1 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${
-                  provider === "nexlayer"
-                    ? "border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400"
-                    : "border-border text-muted-foreground hover:border-blue-500/20 hover:text-blue-500"
-                }`}
+                className="flex-1 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2.5 text-sm font-medium text-blue-600 dark:text-blue-400"
               >
                 Nexlayer
               </button>
             </div>
           </div>
 
-          {/* Input field — varies by provider */}
+          {/* Access code input */}
           <div>
-            {provider === "nexlayer" ? (
-              <>
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                  Access code
-                </label>
-                <Input
-                  type="text"
-                  maxLength={6}
-                  value={accessCode}
-                  onChange={(e) => {
-                    setAccessCode(e.target.value);
-                    setError(null);
-                  }}
-                  placeholder="Access code"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") void handleSave();
-                  }}
-                  autoFocus
-                />
-                <p className="mt-1.5 text-[13px] text-muted-foreground">
-                  Don&apos;t have the code?{" "}
-                  <a
-                    href="https://www.linkedin.com/feed/update/urn:li:activity:7473497952548999168/"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-0.5 text-blue-500 hover:underline"
-                  >
-                    Get it from this post
-                    <ExternalLinkIcon className="size-3" />
-                  </a>
-                </p>
-              </>
-            ) : (
-              <>
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                  API key
-                </label>
-                <Input
-                  type="password"
-                  value={apiKey}
-                  onChange={(e) => {
-                    setApiKey(e.target.value);
-                    setError(null);
-                  }}
-                  placeholder={provider === "openai" ? "sk-..." : "sk-ant-..."}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") void handleSave();
-                  }}
-                  autoFocus
-                />
-              </>
-            )}
+            <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              Access code
+            </label>
+            <Input
+              type="text"
+              maxLength={6}
+              value={accessCode}
+              onChange={(e) => {
+                setAccessCode(e.target.value);
+                setError(null);
+              }}
+              placeholder="Access code"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void handleSave();
+              }}
+              autoFocus
+            />
             {error && (
               <p className="mt-1.5 text-[13px] text-destructive">{error}</p>
             )}
+            <p className="mt-1.5 text-[13px] text-muted-foreground">
+              Don&apos;t have the code?{" "}
+              <a
+                href="https://www.linkedin.com/feed/update/urn:li:activity:7473497952548999168/"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-0.5 text-blue-500 hover:underline"
+              >
+                Get it from this post
+                <ExternalLinkIcon className="size-3" />
+              </a>
+            </p>
           </div>
 
-          {/* Save button */}
+          {/* Continue button */}
           <Button
             className="w-full"
             onClick={handleSave}
-            disabled={
-              saving ||
-              (provider === "nexlayer" ? !accessCode.trim() : !apiKey.trim())
-            }
+            disabled={saving || !accessCode.trim()}
           >
             {saving ? (
               <Loader2Icon className="size-4 animate-spin" />
@@ -281,33 +271,36 @@ function ApiKeySetupScreen({ onSaved }: { onSaved: () => void }) {
               "Continue"
             )}
           </Button>
-
-          {/* Get key links — only for OpenAI/Anthropic */}
-          {provider !== "nexlayer" && (
-            <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
-              <a
-                href="https://platform.openai.com/api-keys"
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 transition-colors hover:text-foreground"
-              >
-                Get OpenAI key
-                <ExternalLinkIcon className="size-3" />
-              </a>
-              <span className="text-muted-foreground/30">·</span>
-              <a
-                href="https://console.anthropic.com/settings/keys"
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 transition-colors hover:text-foreground"
-              >
-                Get Anthropic key
-                <ExternalLinkIcon className="size-3" />
-              </a>
-            </div>
-          )}
         </div>
       </div>
+
+      {/* Funny block modal */}
+      <Dialog open={blockedOpen} onOpenChange={setBlockedOpen}>
+        <DialogContent className="sm:max-w-sm text-center">
+          <DialogHeader>
+            <DialogTitle className="text-center text-xl">
+              {blockedMsg?.heading}
+            </DialogTitle>
+          </DialogHeader>
+          {blockedMsg?.gif && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={blockedMsg.gif}
+              alt={blockedMsg.heading}
+              className="mx-auto w-full max-w-xs rounded-lg"
+            />
+          )}
+          {blockedMsg?.body && (
+            <p className="text-sm text-muted-foreground">{blockedMsg.body}</p>
+          )}
+          <Button
+            className="mt-2 w-full bg-[#22b7cb] hover:bg-[#1da5b8] text-white"
+            onClick={() => setBlockedOpen(false)}
+          >
+            Fine, I&apos;ll use Nexlayer 😤
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -405,7 +398,6 @@ export function ApiKeySettingsDialog() {
         </DialogHeader>
 
         <div className="space-y-4 pt-1">
-          {/* Provider */}
           <div>
             <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
               Provider
@@ -413,10 +405,7 @@ export function ApiKeySettingsDialog() {
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  setProvider("openai");
-                  setError(null);
-                }}
+                onClick={() => { setProvider("openai"); setError(null); }}
                 className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
                   provider === "openai"
                     ? "border-foreground/20 bg-foreground/5 text-foreground"
@@ -427,10 +416,7 @@ export function ApiKeySettingsDialog() {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setProvider("anthropic");
-                  setError(null);
-                }}
+                onClick={() => { setProvider("anthropic"); setError(null); }}
                 className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
                   provider === "anthropic"
                     ? "border-foreground/20 bg-foreground/5 text-foreground"
@@ -442,7 +428,6 @@ export function ApiKeySettingsDialog() {
             </div>
           </div>
 
-          {/* Key input */}
           <div>
             <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
               {status?.hasUserKey ? "Replace API key" : "API key"}
@@ -450,10 +435,7 @@ export function ApiKeySettingsDialog() {
             <Input
               type="password"
               value={apiKey}
-              onChange={(e) => {
-                setApiKey(e.target.value);
-                setError(null);
-              }}
+              onChange={(e) => { setApiKey(e.target.value); setError(null); }}
               placeholder={
                 status?.hasUserKey
                   ? "Enter new key to replace…"
@@ -461,9 +443,7 @@ export function ApiKeySettingsDialog() {
                     ? "sk-..."
                     : "sk-ant-..."
               }
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void handleSave();
-              }}
+              onKeyDown={(e) => { if (e.key === "Enter") void handleSave(); }}
             />
             {error && (
               <p className="mt-1.5 text-[13px] text-destructive">{error}</p>
@@ -478,8 +458,7 @@ export function ApiKeySettingsDialog() {
                 rel="noreferrer"
                 className="inline-flex items-center gap-1 transition-colors hover:text-foreground"
               >
-                OpenAI
-                <ExternalLinkIcon className="size-3" />
+                OpenAI <ExternalLinkIcon className="size-3" />
               </a>
               <a
                 href="https://console.anthropic.com/settings/keys"
@@ -487,11 +466,9 @@ export function ApiKeySettingsDialog() {
                 rel="noreferrer"
                 className="inline-flex items-center gap-1 transition-colors hover:text-foreground"
               >
-                Anthropic
-                <ExternalLinkIcon className="size-3" />
+                Anthropic <ExternalLinkIcon className="size-3" />
               </a>
             </div>
-
             <div className="flex items-center gap-2">
               {status?.hasUserKey && !status?.hasGlobalKey && (
                 <Button
@@ -504,16 +481,8 @@ export function ApiKeySettingsDialog() {
                   {deleting ? "Removing…" : "Remove key"}
                 </Button>
               )}
-              <Button
-                size="sm"
-                onClick={handleSave}
-                disabled={saving || !apiKey.trim()}
-              >
-                {saving ? (
-                  <Loader2Icon className="size-3.5 animate-spin" />
-                ) : (
-                  "Save"
-                )}
+              <Button size="sm" onClick={handleSave} disabled={saving || !apiKey.trim()}>
+                {saving ? <Loader2Icon className="size-3.5 animate-spin" /> : "Save"}
               </Button>
             </div>
           </div>
