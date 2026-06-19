@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/dialog";
 import {
   ExternalLinkIcon,
-  KeyIcon,
   Loader2Icon,
   SettingsIcon,
 } from "lucide-react";
@@ -133,10 +132,26 @@ function ApiKeySetupScreen({ onSaved }: { onSaved: () => void }) {
   return (
     <div className="flex h-full items-center justify-center bg-background">
       <div className="mx-auto w-full max-w-md space-y-8 px-6">
-        {/* Logo / icon */}
+        {/* Nexlayer branding + key icon */}
         <div className="flex flex-col items-center gap-4 text-center">
-          <div className="flex size-14 items-center justify-center rounded-2xl bg-muted">
-            <KeyIcon className="size-7 text-muted-foreground" />
+          <div className="flex flex-col items-center gap-2">
+            <div className="flex size-14 items-center justify-center rounded-2xl bg-[#22b7cb]/10">
+              {/* Nexlayer geometric icon mark */}
+              <svg
+                viewBox="0 0 527 497"
+                className="size-8"
+                xmlns="http://www.w3.org/2000/svg"
+                aria-label="Nexlayer"
+              >
+                <path
+                  fill="#22b7cb"
+                  d="M293.24,126.6V0L0,158.84v337.86l233.72-126.61v126.62l293.23-158.86V0l-233.71,126.6ZM233.72,158.84v143.56l-174.2,94.37v-202.48l174.2-94.37v58.92ZM467.43,302.4l-174.19,94.37v-202.48l174.19-94.37v202.48Z"
+                />
+              </svg>
+            </div>
+            <span className="text-[11px] font-medium tracking-wide text-[#22b7cb] uppercase">
+              Powered by Nexlayer
+            </span>
           </div>
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">
