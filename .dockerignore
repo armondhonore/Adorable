@@ -1,0 +1,8 @@
+.git
+.gitignore
+node_modules
+adorable/node_modules
+adorable/.next
+adorable/.env*
+*.md
+.DS_Store

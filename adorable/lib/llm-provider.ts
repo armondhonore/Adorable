@@ -11,11 +11,12 @@ import {
   convertToModelMessages,
 } from "ai";
 
-type LlmProviderName = "openai" | "anthropic";
+type LlmProviderName = "openai" | "anthropic" | "nexlayer";
 
 const getProviderName = (override?: string): LlmProviderName => {
   const value = (override ?? process.env["LLM_PROVIDER"])?.toLowerCase().trim();
   if (value === "anthropic" || value === "claude") return "anthropic";
+  if (value === "nexlayer" || value === "vllm") return "nexlayer";
   return "openai";
 };
 
@@ -41,6 +42,23 @@ export const streamLlmResponse = async ({
 }: StreamLlmResponseParams): Promise<StreamLlmResponseResult> => {
   const provider = getProviderName(providerOverride);
   const modelMessages = await convertToModelMessages(messages);
+
+  if (provider === "nexlayer") {
+    const vllmBaseUrl = process.env.VLLM_BASE_URL ?? "http://bode-flagship.nexlayer.ai";
+    const vllmProvider = createOpenAI({
+      baseURL: `${vllmBaseUrl}/v1`,
+      apiKey: "EMPTY", // vLLM accepts any non-empty string when auth is disabled
+    });
+    const model = process.env.NEXLAYER_MODEL ?? "bode-flagship";
+    const result = streamText({
+      system,
+      model: vllmProvider.chat(model),
+      messages: modelMessages,
+      tools,
+      stopWhen: stepCountIs(100),
+    });
+    return { result, provider };
+  }
 
   if (provider === "openai") {
     const openaiProvider = apiKey ? createOpenAI({ apiKey }) : createOpenAI({});

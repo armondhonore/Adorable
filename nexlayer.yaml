@@ -1,0 +1,14 @@
+application:
+  name: adorable-ai
+  pods:
+    - name: app
+      image: "# filled by pipeline"
+      path: /
+      servicePorts:
+        - 3000
+      vars:
+        NODE_ENV: production
+        PORT: "3000"
+        LLM_PROVIDER: nexlayer
+        VLLM_BASE_URL: "# filled by platform agent"
+        NEXLAYER_MODEL: bode-flagship
