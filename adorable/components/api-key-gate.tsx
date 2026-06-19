@@ -99,8 +99,8 @@ function ApiKeySetupScreen({ onSaved }: { onSaved: () => void }) {
         setSaving(false);
         return;
       }
-      if (provider === "nexlayer" && accessCode.trim().length !== 6) {
-        setError("Code must be exactly 6 digits");
+      if (provider === "nexlayer" && !accessCode.trim()) {
+        setError("Please enter the access code");
         setSaving(false);
         return;
       }
@@ -201,15 +201,13 @@ function ApiKeySetupScreen({ onSaved }: { onSaved: () => void }) {
                 </label>
                 <Input
                   type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
                   maxLength={6}
                   value={accessCode}
                   onChange={(e) => {
-                    setAccessCode(e.target.value.replace(/\D/g, ""));
+                    setAccessCode(e.target.value);
                     setError(null);
                   }}
-                  placeholder="6-digit code"
+                  placeholder="Access code"
                   onKeyDown={(e) => {
                     if (e.key === "Enter") void handleSave();
                   }}
@@ -259,9 +257,7 @@ function ApiKeySetupScreen({ onSaved }: { onSaved: () => void }) {
             onClick={handleSave}
             disabled={
               saving ||
-              (provider === "nexlayer"
-                ? accessCode.length !== 6
-                : !apiKey.trim())
+              (provider === "nexlayer" ? !accessCode.trim() : !apiKey.trim())
             }
           >
             {saving ? (

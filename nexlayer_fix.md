@@ -72,7 +72,7 @@ application:
         LLM_PROVIDER: nexlayer
         VLLM_BASE_URL: "# filled by platform agent"
         NEXLAYER_MODEL: bode-flagship
-        NEXLAYER_ACCESS_CODE: "# set to your 6-digit code"
+        NEXLAYER_ACCESS_CODE: "FunDay"
 ```
 
 ## Notes
