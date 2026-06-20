@@ -13,3 +13,4 @@ application:
         VLLM_BASE_URL: "# filled by platform agent"
         NEXLAYER_MODEL: bode-flagship
         NEXLAYER_ACCESS_CODE: "FunDay"
+        FREESTYLE_API_KEY: "# get from freestyle.sh dashboard"
