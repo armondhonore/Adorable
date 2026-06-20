@@ -14,7 +14,7 @@ This file is the authoritative, pinned build solution for this repo. Nexlayer us
 
 5. **CMD must be `/bin/sh start.sh`** — `start.sh` sources `/run/secrets/app.env` (mounted secrets) as env vars then execs `node server.js`. Do NOT change the CMD to `node server.js` directly.
 
-6. **`git` must be installed in the deps stage** (`apk add --no-cache libc6-compat git`) — required for workspace git operations at runtime.
+6. **`git` must be installed in BOTH the deps stage AND the runner stage** — deps stage needs it for npm, runner stage needs it because workspace tools run `git init/add/commit` at runtime. Add `RUN apk add --no-cache git` to the runner stage before creating users.
 
 ## Fixed Dockerfile
 
@@ -39,6 +39,8 @@ FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN apk add --no-cache git
 
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
