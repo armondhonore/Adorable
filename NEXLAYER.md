@@ -15,36 +15,36 @@
 
 ## Project Summary
 <!-- nexlayer:section agent-managed=project_summary -->
-Adorable is an open-source AI app builder that allows users to describe applications and have them built in real-time within sandboxed VMs, featuring live previews, integrated terminals, and GitHub synchronization.
+Adorable is an open-source AI app builder that allows users to describe applications and build them in real-time using AI-driven code generation, live previews, and sandboxed VMs via Freestyle.
 <!-- nexlayer:end -->
 
 ## Technology Stack
 <!-- nexlayer:section agent-managed=tech_stack -->
 | Name | Kind | Version | Detected From |
 |------|------|---------|---------------|
-| Next.js | framework | 15.x | Dockerfile, README.md |
-| TypeScript | language | latest | README.md |
+| Next.js | framework | Latest | Dockerfile, README.md |
+| TypeScript | language | Latest | README.md |
+| Vercel AI SDK | ml | Latest | README.md |
+| Freestyle | infra | Latest | README.md |
+| Tailwind CSS | framework | Latest | README.md |
 | Node.js | language | 22-alpine | Dockerfile |
-| Vercel AI SDK | ml | latest | README.md |
-| Freestyle | infra | v2 | README.md |
-| Tailwind CSS | tool | latest | README.md |
 <!-- nexlayer:end -->
 
 ## Repository Structure
 <!-- nexlayer:section agent-managed=structure_map -->
 - adorable/ — Main Next.js application source code
-- Dockerfile — Multi-stage build for production standalone deployment
-- package.json — Workspace root configuration
+- Dockerfile — Multi-stage build for the Next.js standalone production server
+- package.json — Root workspace configuration
 <!-- nexlayer:end -->
 
 ## External Services Required
 <!-- nexlayer:section agent-managed=external_deps -->
 Services that must be configured separately (not deployed by Nexlayer):
 
-- OpenAI API (Required for AI generation)
-- Anthropic API (Required for AI generation)
-- Freestyle Cloud VMs (Sandboxing and persistence)
-- GitHub API (Bidirectional sync)
+- OpenAI API
+- Anthropic API
+- Freestyle.sh Cloud VMs
+- GitHub API
 <!-- nexlayer:end -->
 
 ## Local Development Setup
@@ -82,9 +82,12 @@ FREESTYLE_API_KEY=your_key
 | `app` | `NODE_ENV` | `production` | plain |
 | `app` | `PORT` | `"3000"` | plain |
 | `app` | `LLM_PROVIDER` | `nexlayer` | plain |
-| `app` | `VLLM_BASE_URL` | `"# filled by platform agent"` | plain |
 | `app` | `NEXLAYER_MODEL` | `bode-flagship` | plain |
-| `app` | `NEXLAYER_ACCESS_CODE` | `"FunDay"` | plain |
+| `app-secrets` | `data` | `|` | plain |
+| `app-secrets` | `fileName` | `app.env` | plain |
+| `app-secrets` | `mountPath` | `/run/secrets` | plain |
+| `data` | `mountPath` | `/data` | plain |
+| `data` | `size` | `5Gi` | plain |
 
 ### nexlayer.yaml
 
@@ -93,7 +96,7 @@ application:
   name: adorable-ai
   pods:
     - name: app
-      image: "registry.nexlayer.io/user_01kece1xyh817dwff7wnarhkxd/adorable:19ee2ecceed"
+      image: "registry.nexlayer.io/user_01kece1xyh817dwff7wnarhkxd/adorable:19ee52eefa8"
       path: /
       servicePorts:
         - 3000
@@ -101,9 +104,18 @@ application:
         NODE_ENV: production
         PORT: "3000"
         LLM_PROVIDER: nexlayer
-        VLLM_BASE_URL: "# filled by platform agent"
         NEXLAYER_MODEL: bode-flagship
-        NEXLAYER_ACCESS_CODE: "FunDay"
+      secrets:
+        - name: app-secrets
+          data: |
+            VLLM_BASE_URL=# filled by platform agent
+            NEXLAYER_ACCESS_CODE=# filled by platform agent
+          fileName: app.env
+          mountPath: /run/secrets
+      volumes:
+        - name: data
+          mountPath: /data
+          size: 5Gi
 ```
 <!-- nexlayer:end -->
 
@@ -129,7 +141,7 @@ application:
 
 ## Nexlayer Configuration
 <!-- nexlayer:section agent-managed=nexlayer_config -->
-**Last deployed:** 2026-06-20T02:48:53Z  
+**Last deployed:** 2026-06-20T13:21:39Z  
 **Live URL:** https://relaxed-weasel-adorable-ai.cloud.nexlayer.ai  
 **Runtime:**  · **Port:** auto-detected  
 **Deploy branch:** nexlayer  
@@ -139,7 +151,7 @@ application:
   name: adorable-ai
   pods:
     - name: app
-      image: "registry.nexlayer.io/user_01kece1xyh817dwff7wnarhkxd/adorable:19ee2ecceed"
+      image: "registry.nexlayer.io/user_01kece1xyh817dwff7wnarhkxd/adorable:19ee52eefa8"
       path: /
       servicePorts:
         - 3000
@@ -147,9 +159,18 @@ application:
         NODE_ENV: production
         PORT: "3000"
         LLM_PROVIDER: nexlayer
-        VLLM_BASE_URL: "# filled by platform agent"
         NEXLAYER_MODEL: bode-flagship
-        NEXLAYER_ACCESS_CODE: "FunDay"
+      secrets:
+        - name: app-secrets
+          data: |
+            VLLM_BASE_URL=# filled by platform agent
+            NEXLAYER_ACCESS_CODE=# filled by platform agent
+          fileName: app.env
+          mountPath: /run/secrets
+      volumes:
+        - name: data
+          mountPath: /data
+          size: 5Gi
 ```
 <!-- nexlayer:end -->
 
@@ -157,9 +178,10 @@ application:
 <!-- nexlayer:section agent-managed=build_history -->
 | Date | Status | Notes |
 |------|--------|-------|
-| 2026-06-20T02:47:35Z | analyzed | initial repo analysis |
-| 2026-06-20T02:48:53Z | success | deployed https://relaxed-weasel-adorable-ai.cloud.nexlayer.ai |
+| 2026-06-20T13:19:03Z | analyzed | initial repo analysis |
+| 2026-06-20T13:21:39Z | success | deployed https://relaxed-weasel-adorable-ai.cloud.nexlayer.ai |
 <!-- nexlayer:end -->
+
 
 
 
