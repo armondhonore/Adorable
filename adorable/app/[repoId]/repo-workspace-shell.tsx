@@ -7,6 +7,7 @@ import type { RepoDeployment, RepoItem } from "@/lib/repo-types";
 import { ProjectConversationsProvider } from "@/lib/project-conversations-context";
 import { ReposProvider } from "@/lib/repos-context";
 import { PublishDialog } from "@/components/assistant-ui/publish-dialog";
+import { WorkspacePreview } from "@/components/workspace-preview";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -427,6 +428,11 @@ export function RepoWorkspaceShell({
                   <AppPreview
                     previewUrl={selectedRepo.previewUrl}
                     iframeRef={iframeRef}
+                  />
+                ) : selectedRepo ? (
+                  <WorkspacePreview
+                    repoId={selectedRepo.id}
+                    active={threadIsRunning}
                   />
                 ) : (
                   <PreviewPlaceholder />

@@ -1,10 +1,10 @@
 FROM mirror.gcr.io/library/node:22-alpine AS base
 
 FROM base AS deps
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat git
 WORKDIR /app
-COPY adorable/package.json adorable/package-lock.json ./
-RUN npm ci
+COPY adorable/package.json ./
+RUN npm install --legacy-peer-deps
 
 FROM base AS builder
 WORKDIR /app
@@ -26,6 +26,8 @@ RUN mkdir -p public .next && chown nextjs:nodejs .next
 
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --chown=nextjs:nodejs start.sh ./
+RUN chmod +x start.sh
 
 USER nextjs
 
@@ -33,4 +35,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-CMD ["node", "server.js"]
+CMD ["/bin/sh", "start.sh"]

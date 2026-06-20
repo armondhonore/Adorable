@@ -4,15 +4,17 @@ This file is the authoritative, pinned build solution for this repo. Nexlayer us
 
 ## CRITICAL BUILD CONSTRAINTS
 
-1. **This is an npm workspace — NOT pnpm.** Do not use pnpm or corepack. The adorable/ package has its own `package-lock.json` and is built independently with `npm ci`.
+1. **This is an npm workspace — NOT pnpm.** Do not use pnpm or corepack.
 
-2. **`COPY adorable/package.json adorable/package-lock.json ./` before `npm ci`** — only the adorable sub-package is installed; do not copy the root workspace package.json as the deps are self-contained.
+2. **deps stage: `COPY adorable/package.json ./` then `RUN npm install --legacy-peer-deps`** — do NOT use `npm ci`; the lock file is intentionally not copied so new packages install correctly. Do NOT copy `package-lock.json` in the deps stage.
 
 3. **`output: 'standalone'` is already set in `adorable/next.config.ts`** — do not add it again.
 
-4. **No pnpm, no corepack, no workspace hoisting** — the adorable app builds cleanly from its own lockfile.
+4. **No pnpm, no corepack, no workspace hoisting** — the adorable app builds from package.json with `npm install`.
 
-5. **CMD must be `/bin/sh start.sh`** — `start.sh` sources `/run/secrets/app.env` (mounted secrets) as env vars then execs `node server.js`.
+5. **CMD must be `/bin/sh start.sh`** — `start.sh` sources `/run/secrets/app.env` (mounted secrets) as env vars then execs `node server.js`. Do NOT change the CMD to `node server.js` directly.
+
+6. **`git` must be installed in the deps stage** (`apk add --no-cache libc6-compat git`) — required for workspace git operations at runtime.
 
 ## Fixed Dockerfile
 
@@ -20,10 +22,10 @@ This file is the authoritative, pinned build solution for this repo. Nexlayer us
 FROM mirror.gcr.io/library/node:22-alpine AS base
 
 FROM base AS deps
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat git
 WORKDIR /app
-COPY adorable/package.json adorable/package-lock.json ./
-RUN npm ci
+COPY adorable/package.json ./
+RUN npm install --legacy-peer-deps
 
 FROM base AS builder
 WORKDIR /app
