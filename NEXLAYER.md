@@ -15,26 +15,25 @@
 
 ## Project Summary
 <!-- nexlayer:section agent-managed=project_summary -->
-Adorable is an open-source AI-powered app builder that allows users to describe applications in natural language to generate code, provide live previews, and publish apps via sandboxed VMs.
+Adorable is an open-source AI app builder that allows users to describe an application and have it built in real-time using a sandboxed VM environment with live preview and GitHub synchronization.
 <!-- nexlayer:end -->
 
 ## Technology Stack
 <!-- nexlayer:section agent-managed=tech_stack -->
 | Name | Kind | Version | Detected From |
 |------|------|---------|---------------|
-| Next.js | framework | 15 | README.md, Dockerfile |
-| TypeScript | language | latest | README.md |
-| Vercel AI SDK | ml | latest | README.md |
-| Freestyle | infra | latest | README.md |
+| Next.js | framework | Latest (App Router) | README.md |
+| TypeScript | language | Latest | README.md |
+| Vercel AI SDK | ml | Latest | README.md |
+| Freestyle | infra | Latest | README.md |
 | Node.js | language | 22-alpine | Dockerfile |
-| Tailwind CSS | tool | latest | README.md |
 <!-- nexlayer:end -->
 
 ## Repository Structure
 <!-- nexlayer:section agent-managed=structure_map -->
 - adorable/ — Core Next.js application source
+- Dockerfile — Multi-stage build for standalone Next.js deployment
 - package.json — Root workspace configuration
-- Dockerfile — Multi-stage build for standalone Next.js runner
 <!-- nexlayer:end -->
 
 ## External Services Required
@@ -84,6 +83,7 @@ FREESTYLE_API_KEY=your_key
 | `app` | `LLM_PROVIDER` | `nexlayer` | plain |
 | `app` | `VLLM_BASE_URL` | `"# filled by platform agent"` | plain |
 | `app` | `NEXLAYER_MODEL` | `bode-flagship` | plain |
+| `app` | `NEXLAYER_ACCESS_CODE` | `"FunDay"` | plain |
 
 ### nexlayer.yaml
 
@@ -92,7 +92,7 @@ application:
   name: adorable-ai
   pods:
     - name: app
-      image: "registry.nexlayer.io/user_01kece1xyh817dwff7wnarhkxd/adorable:19edfd2ecd8"
+      image: "registry.nexlayer.io/user_01kece1xyh817dwff7wnarhkxd/adorable:19ee2c1ec27"
       path: /
       servicePorts:
         - 3000
@@ -102,8 +102,8 @@ application:
         LLM_PROVIDER: nexlayer
         VLLM_BASE_URL: "# filled by platform agent"
         NEXLAYER_MODEL: bode-flagship
+        NEXLAYER_ACCESS_CODE: "FunDay"
 ```
-
 <!-- nexlayer:end -->
 
 ## Nexlayer Deployment Plan
@@ -128,7 +128,7 @@ application:
 
 ## Nexlayer Configuration
 <!-- nexlayer:section agent-managed=nexlayer_config -->
-**Last deployed:** 2026-06-19T12:22:40Z  
+**Last deployed:** 2026-06-20T02:03:09Z  
 **Live URL:** https://relaxed-weasel-adorable-ai.cloud.nexlayer.ai  
 **Runtime:**  · **Port:** auto-detected  
 **Deploy branch:** nexlayer  
@@ -138,7 +138,7 @@ application:
   name: adorable-ai
   pods:
     - name: app
-      image: "registry.nexlayer.io/user_01kece1xyh817dwff7wnarhkxd/adorable:19edfd2ecd8"
+      image: "registry.nexlayer.io/user_01kece1xyh817dwff7wnarhkxd/adorable:19ee2c1ec27"
       path: /
       servicePorts:
         - 3000
@@ -148,6 +148,7 @@ application:
         LLM_PROVIDER: nexlayer
         VLLM_BASE_URL: "# filled by platform agent"
         NEXLAYER_MODEL: bode-flagship
+        NEXLAYER_ACCESS_CODE: "FunDay"
 ```
 <!-- nexlayer:end -->
 
@@ -155,6 +156,7 @@ application:
 <!-- nexlayer:section agent-managed=build_history -->
 | Date | Status | Notes |
 |------|--------|-------|
-| 2026-06-19T12:20:27Z | analyzed | initial repo analysis |
-| 2026-06-19T12:22:40Z | success | deployed https://relaxed-weasel-adorable-ai.cloud.nexlayer.ai |
+| 2026-06-20T02:00:43Z | analyzed | initial repo analysis |
+| 2026-06-20T02:03:09Z | success | deployed https://relaxed-weasel-adorable-ai.cloud.nexlayer.ai |
 <!-- nexlayer:end -->
+
