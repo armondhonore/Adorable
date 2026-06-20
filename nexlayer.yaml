@@ -2,7 +2,7 @@ application:
   name: adorable-ai
   pods:
     - name: app
-      image: "registry.nexlayer.io/user_01kece1xyh817dwff7wnarhkxd/adorable:19ee2d8aac5"
+      image: "registry.nexlayer.io/user_01kece1xyh817dwff7wnarhkxd/adorable:19ee2ecceed"
       path: /
       servicePorts:
         - 3000
@@ -10,12 +10,6 @@ application:
         NODE_ENV: production
         PORT: "3000"
         LLM_PROVIDER: nexlayer
+        VLLM_BASE_URL: "# filled by platform agent"
         NEXLAYER_MODEL: bode-flagship
-      secrets:
-        - name: app-secrets
-          data: |
-            VLLM_BASE_URL=# filled by platform agent
-            NEXLAYER_ACCESS_CODE=# filled by platform agent
-            FREESTYLE_API_KEY=# get from freestyle.sh dashboard
-          fileName: app.env
-          mountPath: /run/secrets
+        NEXLAYER_ACCESS_CODE: "FunDay"

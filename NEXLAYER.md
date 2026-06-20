@@ -15,36 +15,36 @@
 
 ## Project Summary
 <!-- nexlayer:section agent-managed=project_summary -->
-Adorable is an open-source AI app builder that allows users to describe applications in natural language, which are then built in real-time within sandboxed VMs with live previews and git-backed persistence.
+Adorable is an open-source AI app builder that allows users to describe applications and have them built in real-time within sandboxed VMs, featuring live previews, integrated terminals, and GitHub synchronization.
 <!-- nexlayer:end -->
 
 ## Technology Stack
 <!-- nexlayer:section agent-managed=tech_stack -->
 | Name | Kind | Version | Detected From |
 |------|------|---------|---------------|
-| Next.js | framework | 15.x | README.md, Dockerfile |
+| Next.js | framework | 15.x | Dockerfile, README.md |
 | TypeScript | language | latest | README.md |
 | Node.js | language | 22-alpine | Dockerfile |
 | Vercel AI SDK | ml | latest | README.md |
-| Freestyle | infra | latest | README.md |
+| Freestyle | infra | v2 | README.md |
 | Tailwind CSS | tool | latest | README.md |
 <!-- nexlayer:end -->
 
 ## Repository Structure
 <!-- nexlayer:section agent-managed=structure_map -->
-- adorable/ — Main application source code (Next.js workspace)
+- adorable/ — Main Next.js application source code
 - Dockerfile — Multi-stage build for production standalone deployment
-- package.json — Root workspace configuration
+- package.json — Workspace root configuration
 <!-- nexlayer:end -->
 
 ## External Services Required
 <!-- nexlayer:section agent-managed=external_deps -->
 Services that must be configured separately (not deployed by Nexlayer):
 
-- OpenAI API
-- Anthropic API
-- Freestyle Cloud VMs
-- GitHub API
+- OpenAI API (Required for AI generation)
+- Anthropic API (Required for AI generation)
+- Freestyle Cloud VMs (Sandboxing and persistence)
+- GitHub API (Bidirectional sync)
 <!-- nexlayer:end -->
 
 ## Local Development Setup
@@ -93,7 +93,7 @@ application:
   name: adorable-ai
   pods:
     - name: app
-      image: "registry.nexlayer.io/user_01kece1xyh817dwff7wnarhkxd/adorable:19ee2d8aac5"
+      image: "registry.nexlayer.io/user_01kece1xyh817dwff7wnarhkxd/adorable:19ee2ecceed"
       path: /
       servicePorts:
         - 3000
@@ -129,7 +129,7 @@ application:
 
 ## Nexlayer Configuration
 <!-- nexlayer:section agent-managed=nexlayer_config -->
-**Last deployed:** 2026-06-20T02:27:00Z  
+**Last deployed:** 2026-06-20T02:48:53Z  
 **Live URL:** https://relaxed-weasel-adorable-ai.cloud.nexlayer.ai  
 **Runtime:**  · **Port:** auto-detected  
 **Deploy branch:** nexlayer  
@@ -139,7 +139,7 @@ application:
   name: adorable-ai
   pods:
     - name: app
-      image: "registry.nexlayer.io/user_01kece1xyh817dwff7wnarhkxd/adorable:19ee2d8aac5"
+      image: "registry.nexlayer.io/user_01kece1xyh817dwff7wnarhkxd/adorable:19ee2ecceed"
       path: /
       servicePorts:
         - 3000
@@ -157,8 +157,9 @@ application:
 <!-- nexlayer:section agent-managed=build_history -->
 | Date | Status | Notes |
 |------|--------|-------|
-| 2026-06-20T02:25:33Z | analyzed | initial repo analysis |
-| 2026-06-20T02:27:00Z | success | deployed https://relaxed-weasel-adorable-ai.cloud.nexlayer.ai |
+| 2026-06-20T02:47:35Z | analyzed | initial repo analysis |
+| 2026-06-20T02:48:53Z | success | deployed https://relaxed-weasel-adorable-ai.cloud.nexlayer.ai |
 <!-- nexlayer:end -->
+
 
 

@@ -26,8 +26,6 @@ RUN mkdir -p public .next && chown nextjs:nodejs .next
 
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --chown=nextjs:nodejs start.sh ./
-RUN chmod +x start.sh
 
 USER nextjs
 
@@ -35,4 +33,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-CMD ["/bin/sh", "start.sh"]
+CMD ["node", "server.js"]
