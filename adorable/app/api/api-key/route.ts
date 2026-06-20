@@ -6,11 +6,7 @@ const COOKIE_PROVIDER = "user-api-provider";
 
 /** Check if a global API key is configured in the environment */
 function hasGlobalKey(): boolean {
-  return !!(
-    process.env.OPENAI_API_KEY ||
-    process.env.ANTHROPIC_API_KEY ||
-    process.env.LLM_PROVIDER === "nexlayer"
-  );
+  return !!(process.env.OPENAI_API_KEY || process.env.ANTHROPIC_API_KEY);
 }
 
 /** GET – returns whether the user needs to provide a key */
