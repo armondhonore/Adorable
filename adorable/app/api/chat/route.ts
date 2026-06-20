@@ -1,11 +1,13 @@
 import { type UIMessage } from "ai";
 import { cookies } from "next/headers";
-import { freestyle } from "freestyle-sandboxes";
-import { createTools as createVmTools } from "@/lib/create-tools";
+import { createTools } from "@/lib/create-tools";
 import { streamLlmResponse } from "@/lib/llm-provider";
-import { adorableVmSpec } from "@/lib/adorable-vm";
 import { getOrCreateIdentitySession } from "@/lib/identity-session";
-import { readRepoMetadata, saveConversationMessages } from "@/lib/repo-storage";
+import {
+  assertRepoAccess,
+  readRepoMetadata,
+  saveConversationMessages,
+} from "@/lib/repo-storage";
 import { SYSTEM_PROMPT } from "@/lib/system-prompt";
 
 export async function POST(req: Request) {
@@ -34,11 +36,9 @@ export async function POST(req: Request) {
     );
   }
 
-  const { identity } = await getOrCreateIdentitySession();
-  const { repositories } = await identity.permissions.git.list({ limit: 200 });
-  const hasAccess = repositories.some((repo) => repo.id === repoId);
+  const { identityId } = await getOrCreateIdentitySession();
 
-  if (!hasAccess) {
+  if (!(await assertRepoAccess(repoId, identityId))) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -52,17 +52,11 @@ export async function POST(req: Request) {
 
   await saveConversationMessages(repoId, metadata, conversationId, messages);
 
-  const vm = freestyle.vms.ref({
-    vmId: metadata.vm.vmId,
-    spec: adorableVmSpec,
-  });
-
-  const tools = createVmTools(vm, {
+  const tools = createTools(metadata.workspacePath, {
     sourceRepoId: metadata.sourceRepoId,
     metadataRepoId: repoId,
   });
 
-  // Read user-provided API key from cookie (if no global env key)
   const jar = await cookies();
   const userApiKey = jar.get("user-api-key")?.value;
   const userProvider = jar.get("user-api-provider")?.value;
@@ -73,7 +67,6 @@ export async function POST(req: Request) {
     process.env.LLM_PROVIDER === "nexlayer"
   );
 
-  // If no global key and no user key, reject
   if (!hasGlobalKey && !userApiKey) {
     return Response.json(
       { error: "No API key configured. Please add your API key in settings." },
@@ -85,7 +78,6 @@ export async function POST(req: Request) {
     system: SYSTEM_PROMPT,
     messages,
     tools,
-    // Only pass user key if there's no global key
     ...(hasGlobalKey
       ? {}
       : { apiKey: userApiKey, providerOverride: userProvider }),

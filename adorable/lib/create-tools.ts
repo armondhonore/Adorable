@@ -1,9 +1,12 @@
 import { tool } from "ai";
-import { freestyle, Vm } from "freestyle-sandboxes";
+import { exec } from "child_process";
+import { promisify } from "util";
+import { promises as fs } from "node:fs";
+import path from "node:path";
 import { z } from "zod";
-import { getDomainForCommit } from "./deployment-status";
 import { addRepoDeployment, readRepoMetadata } from "./repo-storage";
-import { WORKDIR, VM_PORT } from "./vars";
+
+const execAsync = promisify(exec);
 
 type CreateToolsOptions = {
   sourceRepoId?: string;
@@ -25,66 +28,40 @@ const shellQuote = (value: string): string => {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 };
 
-export const createTools = (vm: Vm, options?: CreateToolsOptions) => {
+export const createTools = (workspacePath: string, options?: CreateToolsOptions) => {
   const runExecCommand = async (command: string) => {
-    const execResult = await vm.exec({ command });
-    if (typeof execResult === "string") {
-      return { ok: true, stdout: execResult, stderr: "", command };
-    }
-
-    if (execResult && typeof execResult === "object") {
-      const cast = execResult as Record<string, unknown>;
+    try {
+      const { stdout, stderr } = await execAsync(command, {
+        cwd: workspacePath,
+        timeout: 30_000,
+      });
+      return { ok: true, stdout: stdout || "", stderr: stderr || "", exitCode: 0, command };
+    } catch (error) {
+      const e = error as { stdout?: string; stderr?: string; code?: number };
       return {
-        ok:
-          typeof cast.ok === "boolean"
-            ? cast.ok
-            : typeof cast.exitCode === "number"
-              ? cast.exitCode === 0
-              : true,
-        stdout: typeof cast.stdout === "string" ? cast.stdout : "",
-        stderr: typeof cast.stderr === "string" ? cast.stderr : "",
-        exitCode: typeof cast.exitCode === "number" ? cast.exitCode : null,
+        ok: false,
+        stdout: e.stdout || "",
+        stderr: e.stderr || "",
+        exitCode: e.code ?? 1,
         command,
       };
     }
-
-    return {
-      ok: true,
-      stdout: execResult == null ? "" : String(execResult),
-      stderr: "",
-      command,
-    };
   };
 
-  const getDevServerLogs = async () => {
-    const devServer = (vm as { devServer?: { getLogs?: () => unknown } })
-      .devServer;
-    if (!devServer || typeof devServer.getLogs !== "function") {
-      return { ok: false, error: "Dev server logs unavailable." };
-    }
+  const absPath = (relPath: string) => path.join(workspacePath, relPath);
 
-    try {
-      const raw = await devServer.getLogs();
-      const logs = Array.isArray(raw)
-        ? raw.join("\n")
-        : typeof raw === "string"
-          ? raw
-          : JSON.stringify(raw, null, 2);
-      return { ok: true, logs };
-    } catch (error) {
-      return {
-        ok: false,
-        error: error instanceof Error ? error.message : "Failed to read logs.",
-      };
-    }
+  const readTextFile = async (relPath: string) =>
+    fs.readFile(absPath(relPath), "utf8");
+
+  const writeTextFile = async (relPath: string, content: string) => {
+    const full = absPath(relPath);
+    await fs.mkdir(path.dirname(full), { recursive: true });
+    await fs.writeFile(full, content);
   };
 
   const getHeadCommitSha = async () => {
-    const result = await runExecCommand(
-      `git -C ${shellQuote(WORKDIR)} rev-parse HEAD`,
-    );
+    const result = await runExecCommand("git rev-parse HEAD");
     if (!result.ok) return null;
-
     const sha = result.stdout.trim().split("\n")[0]?.trim();
     if (!sha || !/^[0-9a-f]{7,40}$/i.test(sha)) return null;
     return sha;
@@ -92,7 +69,7 @@ export const createTools = (vm: Vm, options?: CreateToolsOptions) => {
 
   const bashTool = tool({
     description:
-      "Run a bash command inside the Adorable VM and return its output.",
+      "Run a bash command inside the project workspace and return its output.",
     inputSchema: z.object({
       command: z.string().min(1).describe("The bash command to execute."),
     }),
@@ -103,7 +80,7 @@ export const createTools = (vm: Vm, options?: CreateToolsOptions) => {
 
   const readFileTool = tool({
     description:
-      "Read the content of a file in the Adorable VM. Input is the file path relative to the workdir.",
+      "Read the content of a file in the project workspace. Input is the file path relative to the workspace root.",
     inputSchema: z
       .object({
         file: z.string().min(1).describe("The path of the file to read."),
@@ -112,17 +89,19 @@ export const createTools = (vm: Vm, options?: CreateToolsOptions) => {
     execute: async ({ file }) => {
       if (!file) return { content: null };
       const safeFile = normalizeRelativePath(file);
-      if (!safeFile) {
-        return { ok: false, error: "Invalid file path." };
+      if (!safeFile) return { ok: false, error: "Invalid file path." };
+      try {
+        const content = await readTextFile(safeFile);
+        return { content };
+      } catch {
+        return { content: null, error: "File not found." };
       }
-      const result = await vm.fs.readTextFile(safeFile);
-      return { content: result };
     },
   });
 
   const writeFileTool = tool({
     description:
-      "Write content to a file in the Adorable VM. Input is the file path relative to the workdir and the content to write.",
+      "Write content to a file in the project workspace. Input is the file path relative to the workspace root and the content to write.",
     inputSchema: z
       .object({
         file: z.string().min(1).describe("The path of the file to write."),
@@ -132,7 +111,7 @@ export const createTools = (vm: Vm, options?: CreateToolsOptions) => {
     execute: async ({ file, content }) => {
       const safeFile = file ? normalizeRelativePath(file) : null;
       if (!safeFile) return { ok: false, error: "File path is required." };
-      await vm.fs.writeTextFile(safeFile, content);
+      await writeTextFile(safeFile, content);
       return { ok: true };
     },
   });
@@ -156,13 +135,13 @@ export const createTools = (vm: Vm, options?: CreateToolsOptions) => {
           .describe("Maximum recursion depth when recursive is true."),
       })
       .passthrough(),
-    execute: async ({ path, recursive, maxDepth }) => {
-      const safePath = normalizeRelativePath(path ?? ".");
+    execute: async ({ path: listPath, recursive, maxDepth }) => {
+      const safePath = normalizeRelativePath(listPath ?? ".");
       if (!safePath) return { ok: false, error: "Invalid path." };
 
       const command = recursive
-        ? `cd ${shellQuote(WORKDIR)} && find ${shellQuote(safePath)} -maxdepth ${maxDepth} -print | sed 's#^\\./##'`
-        : `cd ${shellQuote(WORKDIR)} && ls -la ${shellQuote(safePath)}`;
+        ? `find ${shellQuote(safePath)} -maxdepth ${maxDepth} -print | sed 's#^\\./##'`
+        : `ls -la ${shellQuote(safePath)}`;
 
       const result = await runExecCommand(command);
       return { ...result, path: safePath, recursive, maxDepth };
@@ -185,11 +164,11 @@ export const createTools = (vm: Vm, options?: CreateToolsOptions) => {
           .describe("Maximum number of matching lines to return."),
       })
       .passthrough(),
-    execute: async ({ query, path, maxResults }) => {
-      const safePath = normalizeRelativePath(path ?? ".");
+    execute: async ({ query, path: searchPath, maxResults }) => {
+      const safePath = normalizeRelativePath(searchPath ?? ".");
       if (!safePath) return { ok: false, error: "Invalid path." };
 
-      const command = `cd ${shellQuote(WORKDIR)} && grep -RIn --exclude-dir=node_modules --exclude-dir=.next -- ${shellQuote(query)} ${shellQuote(safePath)} | head -n ${maxResults}`;
+      const command = `grep -RIn --exclude-dir=node_modules --exclude-dir=.next -- ${shellQuote(query)} ${shellQuote(safePath)} | head -n ${maxResults}`;
       const result = await runExecCommand(command);
       return { ...result, query, path: safePath, maxResults };
     },
@@ -213,18 +192,16 @@ export const createTools = (vm: Vm, options?: CreateToolsOptions) => {
       const safeFile = normalizeRelativePath(file);
       if (!safeFile) return { ok: false, error: "Invalid file path." };
 
-      const original = await vm.fs.readTextFile(safeFile);
-      const content =
-        typeof original === "string" ? original : String(original);
+      let content: string;
+      try {
+        content = await readTextFile(safeFile);
+      } catch {
+        return { ok: false, error: "File not found." };
+      }
 
       if (!search) return { ok: false, error: "Search text is required." };
       if (!content.includes(search)) {
-        return {
-          ok: false,
-          file: safeFile,
-          replacements: 0,
-          error: "No matches found.",
-        };
+        return { ok: false, file: safeFile, replacements: 0, error: "No matches found." };
       }
 
       const nextContent = all
@@ -232,11 +209,9 @@ export const createTools = (vm: Vm, options?: CreateToolsOptions) => {
         : content.replace(search, replace);
       const replacements = all
         ? content.split(search).length - 1
-        : content === nextContent
-          ? 0
-          : 1;
+        : content === nextContent ? 0 : 1;
 
-      await vm.fs.writeTextFile(safeFile, nextContent);
+      await writeTextFile(safeFile, nextContent);
       return { ok: true, file: safeFile, replacements };
     },
   });
@@ -256,13 +231,12 @@ export const createTools = (vm: Vm, options?: CreateToolsOptions) => {
 
       let existing = "";
       try {
-        const current = await vm.fs.readFile(safeFile);
-        existing = typeof current === "string" ? current : String(current);
+        existing = await readTextFile(safeFile);
       } catch {
         existing = "";
       }
 
-      await vm.fs.writeTextFile(safeFile, `${existing}${content}`);
+      await writeTextFile(safeFile, `${existing}${content}`);
       return { ok: true, file: safeFile, appendedBytes: content.length };
     },
   });
@@ -274,12 +248,11 @@ export const createTools = (vm: Vm, options?: CreateToolsOptions) => {
         path: z.string().min(1).describe("Directory path to create."),
       })
       .passthrough(),
-    execute: async ({ path }) => {
-      const safePath = normalizeRelativePath(path);
+    execute: async ({ path: dirPath }) => {
+      const safePath = normalizeRelativePath(dirPath);
       if (!safePath) return { ok: false, error: "Invalid path." };
-      return runExecCommand(
-        `cd ${shellQuote(WORKDIR)} && mkdir -p ${shellQuote(safePath)}`,
-      );
+      await fs.mkdir(absPath(safePath), { recursive: true });
+      return { ok: true, path: safePath };
     },
   });
 
@@ -298,7 +271,7 @@ export const createTools = (vm: Vm, options?: CreateToolsOptions) => {
         return { ok: false, error: "Invalid source or destination path." };
       }
       return runExecCommand(
-        `cd ${shellQuote(WORKDIR)} && mv ${shellQuote(safeFrom)} ${shellQuote(safeTo)}`,
+        `mv ${shellQuote(safeFrom)} ${shellQuote(safeTo)}`,
       );
     },
   });
@@ -310,94 +283,55 @@ export const createTools = (vm: Vm, options?: CreateToolsOptions) => {
         path: z.string().min(1).describe("File or directory path to delete."),
       })
       .passthrough(),
-    execute: async ({ path }) => {
-      const safePath = normalizeRelativePath(path);
+    execute: async ({ path: delPath }) => {
+      const safePath = normalizeRelativePath(delPath);
       if (!safePath) return { ok: false, error: "Invalid path." };
-      return runExecCommand(
-        `cd ${shellQuote(WORKDIR)} && rm -rf ${shellQuote(safePath)}`,
-      );
+      return runExecCommand(`rm -rf ${shellQuote(safePath)}`);
     },
   });
 
   const commitTool = tool({
     description:
-      "Stage all current changes, commit them, and push them to the remote repository. You should use this at any point you think the user would have value returning to. Always commit and push your changes when you finish a task.",
+      "Stage all current changes, commit them to the local repository. You should use this at any point you think the user would have value returning to. Always commit your changes when you finish a task.",
     inputSchema: z
       .object({
         message: z.string().min(1).describe("Commit message."),
       })
       .passthrough(),
     execute: async ({ message }) => {
-      const gitCommand = `git -C ${shellQuote(WORKDIR)} config user.name ${shellQuote(
-        "Adorable",
-      )} && git -C ${shellQuote(WORKDIR)} config user.email ${shellQuote(
-        "adorable@freestyle.sh",
-      )} && git -C ${shellQuote(WORKDIR)} commit -am ${shellQuote(
-        message,
-      )} && git -C ${shellQuote(WORKDIR)} pull --rebase && git -C ${shellQuote(
-        WORKDIR,
-      )} push`;
+      const gitCommand = `git config user.name 'Adorable' && git config user.email 'adorable@nexlayer.com' && git add -A && git commit -m ${shellQuote(message)}`;
       const commitResult = await runExecCommand(gitCommand);
 
-      if (commitResult.ok && options?.sourceRepoId && options?.metadataRepoId) {
+      if (commitResult.ok && options?.metadataRepoId) {
         void (async () => {
           const commitSha = await getHeadCommitSha();
           if (!commitSha) return;
 
-          const deploymentDomain = getDomainForCommit(commitSha);
           const metadata = await readRepoMetadata(options.metadataRepoId!);
           if (!metadata) return;
 
+          const domain = `${commitSha.slice(0, 12)}.adorable.cloud.nexlayer.ai`;
           await addRepoDeployment(options.metadataRepoId!, metadata, {
             commitSha,
             commitMessage: message,
             commitDate: new Date().toISOString(),
-            domain: deploymentDomain,
-            url: `https://${deploymentDomain}`,
+            domain,
+            url: `https://${domain}`,
             deploymentId: null,
-            state: "deploying",
-          });
-
-          const deployment = await freestyle.serverless.deployments.create({
-            repo: options.sourceRepoId!,
-            domains: [deploymentDomain],
-            build: true,
-          });
-
-          const deploymentId =
-            deployment && typeof deployment === "object" && "id" in deployment
-              ? String((deployment as Record<string, unknown>).id ?? "") || null
-              : null;
-
-          const latestMetadata = await readRepoMetadata(
-            options.metadataRepoId!,
-          );
-          if (!latestMetadata) return;
-
-          await addRepoDeployment(options.metadataRepoId!, latestMetadata, {
-            commitSha,
-            commitMessage: message,
-            commitDate: new Date().toISOString(),
-            domain: deploymentDomain,
-            url: `https://${deploymentDomain}`,
-            deploymentId,
-            state: "deploying",
+            state: "idle",
           });
         })().catch((error) => {
-          console.error("Post-commit deploy failed:", error);
+          console.error("Post-commit metadata update failed:", error);
         });
       }
 
-      return {
-        ...commitResult,
-        deploymentQueued: commitResult.ok,
-      };
+      return { ...commitResult, deploymentQueued: false };
     },
   });
 
   const checkAppTool = tool({
     description:
-      "Check if the app is running correctly by making an HTTP request to the dev server and scanning Next.js logs for runtime or compile issues. You MUST call this tool before finishing any task to verify the app is not broken. If the status code is not 200 or logs show errors, investigate and fix the issue before telling the user you are done.",
+      "Check the current state of the project. Use this to verify files are in order before finishing a task.",
     inputSchema: z
       .object({
         path: z
@@ -406,54 +340,22 @@ export const createTools = (vm: Vm, options?: CreateToolsOptions) => {
           .describe("The URL path to check (e.g. '/' or '/about')."),
       })
       .passthrough(),
-    execute: async ({ path }) => {
-      const urlPath = path?.startsWith("/") ? path : `/${path ?? ""}`;
-      const command = `curl -s -o /dev/null -w '{"statusCode":%{http_code},"totalTime":%{time_total},"url":"%{url_effective}"}' http://localhost:${VM_PORT}${urlPath}`;
-      const result = await runExecCommand(command);
-      const logsResult = await getDevServerLogs();
-      const logText = logsResult.ok && logsResult.logs ? logsResult.logs : "";
-      const issueRegex =
-        /(error -|failed to compile|module not found|unhandled runtime error|referenceerror|typeerror|syntaxerror|cannot find module)/i;
-      const issues = logText
-        ? logText
-            .split("\n")
-            .filter((line) => issueRegex.test(line))
-            .slice(-20)
-        : [];
-      try {
-        const info = JSON.parse(result.stdout);
-        const httpOk = info.statusCode >= 200 && info.statusCode < 400;
-        const ok = httpOk && issues.length === 0;
-        return {
-          ok,
-          statusCode: info.statusCode,
-          totalTime: info.totalTime,
-          url: info.url,
-          issues,
-          issueCount: issues.length,
-          logsError: logsResult.ok ? null : logsResult.error,
-          ...(ok
-            ? {}
-            : {
-                error: httpOk
-                  ? "App is reachable, but Next.js logs show issues."
-                  : `App returned HTTP ${info.statusCode}. Investigate the issue before reporting completion.`,
-              }),
-        };
-      } catch {
-        return {
-          ok: false,
-          error: "Failed to reach the dev server. It may not be running.",
-          raw: result.stdout,
-          logsError: logsResult.ok ? null : logsResult.error,
-        };
-      }
+    execute: async ({ path: checkPath }) => {
+      const listResult = await runExecCommand(
+        "git status --short && git log --oneline -5",
+      );
+      return {
+        ok: true,
+        message: `Workspace is ready. Use the Sandpack preview to view the app live. Deploy via commitTool to get a shareable URL.`,
+        path: checkPath,
+        workspaceStatus: listResult.stdout,
+      };
     },
   });
 
   const devServerLogsTool = tool({
     description:
-      "Fetch recent dev server logs (Next.js). Use this to debug build/runtime issues.",
+      "Check the project workspace git log for recent changes.",
     inputSchema: z
       .object({
         maxLines: z
@@ -466,13 +368,10 @@ export const createTools = (vm: Vm, options?: CreateToolsOptions) => {
       })
       .passthrough(),
     execute: async ({ maxLines }) => {
-      const logsResult = await getDevServerLogs();
-      if (!logsResult.ok || !logsResult.logs) {
-        return { ok: false, error: "Dev server logs unavailable." };
-      }
-      const lines = logsResult.logs.split("\n");
-      const tail = lines.slice(-maxLines).join("\n");
-      return { ok: true, logs: tail, totalLines: lines.length };
+      const result = await runExecCommand(`git log --oneline -${maxLines}`);
+      return result.ok
+        ? { ok: true, logs: result.stdout, totalLines: result.stdout.split("\n").length }
+        : { ok: false, error: "Could not read git log." };
     },
   });
 

@@ -1,21 +1,20 @@
 import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { getOrCreateIdentitySession } from "@/lib/identity-session";
-import { createConversationInRepo, readRepoMetadata } from "@/lib/repo-storage";
-
-const assertRepoAccess = async (repoId: string) => {
-  const { identity } = await getOrCreateIdentitySession();
-  const { repositories } = await identity.permissions.git.list({ limit: 200 });
-  return repositories.some((repo) => repo.id === repoId);
-};
+import {
+  assertRepoAccess,
+  createConversationInRepo,
+  readRepoMetadata,
+} from "@/lib/repo-storage";
 
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ repoId: string }> },
 ) {
   const { repoId } = await params;
+  const { identityId } = await getOrCreateIdentitySession();
 
-  if (!(await assertRepoAccess(repoId))) {
+  if (!(await assertRepoAccess(repoId, identityId))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -35,6 +34,7 @@ export async function POST(
   { params }: { params: Promise<{ repoId: string }> },
 ) {
   const { repoId } = await params;
+  const { identityId } = await getOrCreateIdentitySession();
 
   let requestedTitle: string | undefined;
   try {
@@ -45,7 +45,7 @@ export async function POST(
     requestedTitle = undefined;
   }
 
-  if (!(await assertRepoAccess(repoId))) {
+  if (!(await assertRepoAccess(repoId, identityId))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

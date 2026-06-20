@@ -1,15 +1,16 @@
 import { type UIMessage } from "ai";
-import { freestyle } from "freestyle-sandboxes";
+import { promises as fs } from "node:fs";
+import path from "node:path";
 
-export const ADORABLE_METADATA_PATH = "metadata.json";
-export const ADORABLE_CONVERSATIONS_DIR = "conversations";
 export const ADORABLE_WRAPPER_REPO_PREFIX = "adorable-meta - ";
 
-export type RepoVmMetadata = {
-  vmId: string;
-  previewUrl: string;
-  devCommandTerminalUrl: string;
-  additionalTerminalsUrl: string;
+const DATA_DIR = process.env.DATA_DIR ?? "/data";
+const PROJECTS_DIR = path.join(DATA_DIR, "projects");
+const MESSAGES_DIR = path.join(DATA_DIR, "messages");
+
+const ensureDirs = async () => {
+  await fs.mkdir(PROJECTS_DIR, { recursive: true });
+  await fs.mkdir(MESSAGES_DIR, { recursive: true });
 };
 
 export type RepoConversationSummary = {
@@ -33,85 +34,27 @@ export type RepoMetadata = {
   version: 2;
   sourceRepoId: string;
   name?: string;
-  vm: RepoVmMetadata;
+  ownerId: string;
+  workspacePath: string;
+  githubRepo: string | null;
+  previewUrl: string | null;
   conversations: RepoConversationSummary[];
   deployments: RepoDeploymentSummary[];
   productionDomain: string | null;
   productionDeploymentId: string | null;
 };
 
-type StoredRepoMetadata = {
-  version: 2;
-  sourceRepoId: string;
-  name?: string;
-  vm: RepoVmMetadata;
-  conversations: RepoConversationSummary[];
-  deployments: RepoDeploymentSummary[];
-  productionDomain: string | null;
-  productionDeploymentId: string | null;
-};
+const projectFile = (repoId: string) =>
+  path.join(PROJECTS_DIR, `${repoId}.json`);
 
-const decodeBase64 = (value: string) => {
-  return Buffer.from(value, "base64").toString("utf8");
-};
-
-const encodeJson = (value: unknown) => {
-  return JSON.stringify(value, null, 2);
-};
-
-const getDefaultBranch = async (repoId: string) => {
-  const repo = freestyle.git.repos.ref({ repoId });
-  const { defaultBranch } = await repo.branches.getDefaultBranch();
-  return defaultBranch;
-};
-
-const readJsonFile = async <T>(
-  repoId: string,
-  path: string,
-): Promise<T | null> => {
-  const repo = freestyle.git.repos.ref({ repoId });
-  const rev = await getDefaultBranch(repoId);
-
-  try {
-    const entry = await repo.contents.get({ path, rev });
-    if (entry.type !== "file") return null;
-    return JSON.parse(decodeBase64(entry.content)) as T;
-  } catch {
-    return null;
-  }
-};
-
-const writeCommit = async (
-  repoId: string,
-  message: string,
-  files: Array<{ path: string; content: string }>,
-) => {
-  const repo = freestyle.git.repos.ref({ repoId });
-  const branch = await getDefaultBranch(repoId);
-
-  await repo.commits.create({
-    message,
-    branch,
-    files,
-    author: {
-      name: "Adorable",
-      email: "adorable@freestyle.sh",
-    },
-  });
-};
-
-const conversationPath = (conversationId: string) => {
-  return `${ADORABLE_CONVERSATIONS_DIR}/${conversationId}.json`;
-};
+const messagesFile = (conversationId: string) =>
+  path.join(MESSAGES_DIR, `${conversationId}.json`);
 
 const deriveConversationTitle = (
   messages: UIMessage[] | undefined,
   fallback: string,
 ): string => {
-  if (!Array.isArray(messages) || messages.length === 0) {
-    return fallback;
-  }
-
+  if (!Array.isArray(messages) || messages.length === 0) return fallback;
   const userMessage = messages.find((m) => m.role === "user");
   const textPart = userMessage?.parts?.find((part) => part.type === "text");
   const text = textPart && "text" in textPart ? textPart.text : "";
@@ -123,23 +66,48 @@ const deriveConversationTitle = (
 export const readRepoMetadata = async (
   repoId: string,
 ): Promise<RepoMetadata | null> => {
-  const metadata = await readJsonFile<StoredRepoMetadata>(
-    repoId,
-    ADORABLE_METADATA_PATH,
-  );
-  if (!metadata) return null;
-  if (!metadata.sourceRepoId) return null;
+  await ensureDirs();
+  try {
+    const raw = await fs.readFile(projectFile(repoId), "utf8");
+    return JSON.parse(raw) as RepoMetadata;
+  } catch {
+    return null;
+  }
+};
 
-  return {
-    version: metadata.version,
-    sourceRepoId: metadata.sourceRepoId,
-    name: metadata.name,
-    vm: metadata.vm,
-    conversations: metadata.conversations,
-    deployments: metadata.deployments,
-    productionDomain: metadata.productionDomain,
-    productionDeploymentId: metadata.productionDeploymentId,
-  };
+export const writeRepoMetadata = async (
+  repoId: string,
+  metadata: RepoMetadata,
+): Promise<void> => {
+  await ensureDirs();
+  await fs.writeFile(projectFile(repoId), JSON.stringify(metadata, null, 2));
+};
+
+export const listProjectsByOwner = async (
+  ownerId: string,
+): Promise<RepoMetadata[]> => {
+  await ensureDirs();
+  let files: string[];
+  try {
+    files = await fs.readdir(PROJECTS_DIR);
+  } catch {
+    return [];
+  }
+  const results = await Promise.all(
+    files
+      .filter((f) => f.endsWith(".json"))
+      .map(async (f) => {
+        try {
+          const raw = await fs.readFile(path.join(PROJECTS_DIR, f), "utf8");
+          return JSON.parse(raw) as RepoMetadata;
+        } catch {
+          return null;
+        }
+      }),
+  );
+  return results.filter(
+    (m): m is RepoMetadata => m !== null && m.ownerId === ownerId,
+  );
 };
 
 export const resolveSourceRepoId = async (repoId: string) => {
@@ -147,13 +115,12 @@ export const resolveSourceRepoId = async (repoId: string) => {
   return metadata?.sourceRepoId ?? repoId;
 };
 
-export const writeRepoMetadata = async (
+export const assertRepoAccess = async (
   repoId: string,
-  metadata: RepoMetadata,
-) => {
-  await writeCommit(repoId, "Update adorable metadata", [
-    { path: ADORABLE_METADATA_PATH, content: encodeJson(metadata) },
-  ]);
+  identityId: string,
+): Promise<boolean> => {
+  const metadata = await readRepoMetadata(repoId);
+  return metadata?.ownerId === identityId;
 };
 
 export const createConversationInRepo = async (
@@ -161,40 +128,28 @@ export const createConversationInRepo = async (
   metadata: RepoMetadata,
   conversationId: string,
   initialTitle?: string,
-) => {
+): Promise<RepoMetadata> => {
   const latestMetadata = (await readRepoMetadata(repoId)) ?? metadata;
   const now = new Date().toISOString();
-  const normalizedInitialTitle = initialTitle?.trim().replace(/\s+/g, " ");
+  const normalizedTitle = initialTitle?.trim().replace(/\s+/g, " ");
   const fallbackTitle =
-    normalizedInitialTitle && normalizedInitialTitle.length > 0
-      ? normalizedInitialTitle.slice(0, 60)
+    normalizedTitle && normalizedTitle.length > 0
+      ? normalizedTitle.slice(0, 60)
       : `Conversation ${latestMetadata.conversations.length + 1}`;
 
   const nextMetadata: RepoMetadata = {
-    ...metadata,
     ...latestMetadata,
-    sourceRepoId: latestMetadata.sourceRepoId,
     conversations: [
-      {
-        id: conversationId,
-        title: fallbackTitle,
-        createdAt: now,
-        updatedAt: now,
-      },
+      { id: conversationId, title: fallbackTitle, createdAt: now, updatedAt: now },
       ...latestMetadata.conversations,
     ],
   };
 
-  await writeCommit(repoId, "Create conversation", [
-    {
-      path: ADORABLE_METADATA_PATH,
-      content: encodeJson(nextMetadata),
-    },
-    {
-      path: conversationPath(conversationId),
-      content: encodeJson([]),
-    },
-  ]);
+  await writeRepoMetadata(repoId, nextMetadata);
+
+  // Write empty messages file
+  await fs.mkdir(MESSAGES_DIR, { recursive: true });
+  await fs.writeFile(messagesFile(conversationId), "[]");
 
   return nextMetadata;
 };
@@ -203,12 +158,13 @@ export const readConversationMessages = async (
   repoId: string,
   conversationId: string,
 ): Promise<UIMessage[]> => {
-  return (
-    (await readJsonFile<UIMessage[]>(
-      repoId,
-      conversationPath(conversationId),
-    )) ?? []
-  );
+  void repoId;
+  try {
+    const raw = await fs.readFile(messagesFile(conversationId), "utf8");
+    return JSON.parse(raw) as UIMessage[];
+  } catch {
+    return [];
+  }
 };
 
 export const saveConversationMessages = async (
@@ -216,7 +172,7 @@ export const saveConversationMessages = async (
   metadata: RepoMetadata,
   conversationId: string,
   messages: UIMessage[],
-) => {
+): Promise<RepoMetadata> => {
   const latestMetadata = (await readRepoMetadata(repoId)) ?? metadata;
   const now = new Date().toISOString();
 
@@ -228,32 +184,22 @@ export const saveConversationMessages = async (
     `Conversation ${latestMetadata.conversations.length + 1}`;
   const title = deriveConversationTitle(messages, fallbackTitle);
 
-  const updatedConversation: RepoConversationSummary = {
-    id: conversationId,
-    title,
-    createdAt: existing?.createdAt ?? now,
-    updatedAt: now,
-  };
-
-  const nextConversations = [
-    updatedConversation,
-    ...latestMetadata.conversations.filter((c) => c.id !== conversationId),
-  ];
-
   const nextMetadata: RepoMetadata = {
     ...latestMetadata,
-    conversations: nextConversations,
+    conversations: [
+      {
+        id: conversationId,
+        title,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      },
+      ...latestMetadata.conversations.filter((c) => c.id !== conversationId),
+    ],
   };
 
-  await writeCommit(repoId, "Update conversation", [
-    {
-      path: ADORABLE_METADATA_PATH,
-      content: encodeJson(nextMetadata),
-    },
-    {
-      path: conversationPath(conversationId),
-      content: encodeJson(messages),
-    },
+  await Promise.all([
+    writeRepoMetadata(repoId, nextMetadata),
+    fs.writeFile(messagesFile(conversationId), JSON.stringify(messages, null, 2)),
   ]);
 
   return nextMetadata;
@@ -263,7 +209,7 @@ export const addRepoDeployment = async (
   repoId: string,
   metadata: RepoMetadata,
   deployment: RepoDeploymentSummary,
-) => {
+): Promise<RepoMetadata> => {
   const latestMetadata = (await readRepoMetadata(repoId)) ?? metadata;
   const nextMetadata: RepoMetadata = {
     ...latestMetadata,
@@ -274,14 +220,7 @@ export const addRepoDeployment = async (
       ),
     ],
   };
-
-  await writeCommit(repoId, "Record deployment", [
-    {
-      path: ADORABLE_METADATA_PATH,
-      content: encodeJson(nextMetadata),
-    },
-  ]);
-
+  await writeRepoMetadata(repoId, nextMetadata);
   return nextMetadata;
 };
 
@@ -289,20 +228,10 @@ export const setRepoProductionDomain = async (
   repoId: string,
   metadata: RepoMetadata,
   productionDomain: string,
-) => {
+): Promise<RepoMetadata> => {
   const latestMetadata = (await readRepoMetadata(repoId)) ?? metadata;
-  const nextMetadata: RepoMetadata = {
-    ...latestMetadata,
-    productionDomain,
-  };
-
-  await writeCommit(repoId, "Configure production domain", [
-    {
-      path: ADORABLE_METADATA_PATH,
-      content: encodeJson(nextMetadata),
-    },
-  ]);
-
+  const nextMetadata: RepoMetadata = { ...latestMetadata, productionDomain };
+  await writeRepoMetadata(repoId, nextMetadata);
   return nextMetadata;
 };
 
@@ -310,19 +239,9 @@ export const promoteRepoDeploymentToProduction = async (
   repoId: string,
   metadata: RepoMetadata,
   productionDeploymentId: string,
-) => {
+): Promise<RepoMetadata> => {
   const latestMetadata = (await readRepoMetadata(repoId)) ?? metadata;
-  const nextMetadata: RepoMetadata = {
-    ...latestMetadata,
-    productionDeploymentId,
-  };
-
-  await writeCommit(repoId, "Promote deployment to production", [
-    {
-      path: ADORABLE_METADATA_PATH,
-      content: encodeJson(nextMetadata),
-    },
-  ]);
-
+  const nextMetadata: RepoMetadata = { ...latestMetadata, productionDeploymentId };
+  await writeRepoMetadata(repoId, nextMetadata);
   return nextMetadata;
 };

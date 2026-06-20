@@ -26,7 +26,7 @@ function getPreviewUrl(repo: RepoItem): string | null {
   const live = repo.deployments.find((d) => d.state === "live");
   if (live?.url) return live.url;
   // fall back to vm preview
-  if (repo.vm?.previewUrl) return repo.vm.previewUrl;
+  if (repo.previewUrl) return repo.previewUrl;
   return null;
 }
 

@@ -1,20 +1,15 @@
 import { NextResponse } from "next/server";
 import { getOrCreateIdentitySession } from "@/lib/identity-session";
-import { readConversationMessages } from "@/lib/repo-storage";
-
-const assertRepoAccess = async (repoId: string) => {
-  const { identity } = await getOrCreateIdentitySession();
-  const { repositories } = await identity.permissions.git.list({ limit: 200 });
-  return repositories.some((repo) => repo.id === repoId);
-};
+import { assertRepoAccess, readConversationMessages } from "@/lib/repo-storage";
 
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ repoId: string; conversationId: string }> },
 ) {
   const { repoId, conversationId } = await params;
+  const { identityId } = await getOrCreateIdentitySession();
 
-  if (!(await assertRepoAccess(repoId))) {
+  if (!(await assertRepoAccess(repoId, identityId))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

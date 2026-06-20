@@ -1,14 +1,10 @@
 import { NextResponse } from "next/server";
 import { getOrCreateIdentitySession } from "@/lib/identity-session";
-import { readRepoMetadata, setRepoProductionDomain } from "@/lib/repo-storage";
-
-const PRODUCTION_SUFFIX = ".style.dev";
-
-const assertRepoAccess = async (repoId: string) => {
-  const { identity } = await getOrCreateIdentitySession();
-  const { repositories } = await identity.permissions.git.list({ limit: 200 });
-  return repositories.some((repo) => repo.id === repoId);
-};
+import {
+  assertRepoAccess,
+  readRepoMetadata,
+  setRepoProductionDomain,
+} from "@/lib/repo-storage";
 
 const normalizeDomain = (domain: string) => {
   const trimmed = domain.trim().toLowerCase();
@@ -16,13 +12,8 @@ const normalizeDomain = (domain: string) => {
   return withoutProtocol.split("/")[0] ?? "";
 };
 
-const isValidProductionDomain = (domain: string) => {
-  return (
-    domain.endsWith(PRODUCTION_SUFFIX) &&
-    /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9-]+)*\.style\.dev$/.test(
-      domain,
-    )
-  );
+const isValidDomain = (domain: string) => {
+  return /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9-]+)+$/.test(domain);
 };
 
 export async function POST(
@@ -30,8 +21,9 @@ export async function POST(
   { params }: { params: Promise<{ repoId: string }> },
 ) {
   const { repoId } = await params;
+  const { identityId } = await getOrCreateIdentitySession();
 
-  if (!(await assertRepoAccess(repoId))) {
+  if (!(await assertRepoAccess(repoId, identityId))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -44,9 +36,9 @@ export async function POST(
   }
 
   const domain = normalizeDomain(requestedDomain);
-  if (!domain || !isValidProductionDomain(domain)) {
+  if (!domain || !isValidDomain(domain)) {
     return NextResponse.json(
-      { error: "Domain must be a valid hostname ending in .style.dev" },
+      { error: "Invalid domain name" },
       { status: 400 },
     );
   }

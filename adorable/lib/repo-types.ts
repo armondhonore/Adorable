@@ -15,17 +15,10 @@ export type RepoConversation = {
   updatedAt: string;
 };
 
-export type RepoVmInfo = {
-  vmId: string;
-  previewUrl: string;
-  devCommandTerminalUrl: string;
-  additionalTerminalsUrl: string;
-};
-
 export type RepoItem = {
   id: string;
   name: string;
-  vm: RepoVmInfo | null;
+  previewUrl: string | null;
   conversations: RepoConversation[];
   deployments: RepoDeployment[];
   productionDomain: string | null;

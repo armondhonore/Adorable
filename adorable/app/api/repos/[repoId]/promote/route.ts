@@ -1,24 +1,19 @@
 import { NextResponse } from "next/server";
-import { freestyle } from "freestyle-sandboxes";
 import { getOrCreateIdentitySession } from "@/lib/identity-session";
 import {
+  assertRepoAccess,
   promoteRepoDeploymentToProduction,
   readRepoMetadata,
 } from "@/lib/repo-storage";
-
-const assertRepoAccess = async (repoId: string) => {
-  const { identity } = await getOrCreateIdentitySession();
-  const { repositories } = await identity.permissions.git.list({ limit: 200 });
-  return repositories.some((repo) => repo.id === repoId);
-};
 
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ repoId: string }> },
 ) {
   const { repoId } = await params;
+  const { identityId } = await getOrCreateIdentitySession();
 
-  if (!(await assertRepoAccess(repoId))) {
+  if (!(await assertRepoAccess(repoId, identityId))) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -47,15 +42,10 @@ export async function POST(
 
   if (!metadata.productionDomain) {
     return NextResponse.json(
-      { error: "Configure a production domain ending in .style.dev first" },
+      { error: "Configure a production domain first" },
       { status: 400 },
     );
   }
-
-  await freestyle.domains.mappings.create({
-    domain: metadata.productionDomain,
-    deploymentId,
-  });
 
   const nextMetadata = await promoteRepoDeploymentToProduction(
     repoId,

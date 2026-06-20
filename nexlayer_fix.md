@@ -78,9 +78,12 @@ application:
           data: |
             VLLM_BASE_URL=# filled by platform agent
             NEXLAYER_ACCESS_CODE=# filled by platform agent
-            FREESTYLE_API_KEY=# get from freestyle.sh dashboard
           fileName: app.env
           mountPath: /run/secrets
+      volumes:
+        - name: data
+          mountPath: /data
+          size: 5Gi
 ```
 
 ## Notes

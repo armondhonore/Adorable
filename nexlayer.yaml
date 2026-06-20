@@ -10,6 +10,15 @@ application:
         NODE_ENV: production
         PORT: "3000"
         LLM_PROVIDER: nexlayer
-        VLLM_BASE_URL: "# filled by platform agent"
         NEXLAYER_MODEL: bode-flagship
-        NEXLAYER_ACCESS_CODE: "FunDay"
+      secrets:
+        - name: app-secrets
+          data: |
+            VLLM_BASE_URL=# filled by platform agent
+            NEXLAYER_ACCESS_CODE=# filled by platform agent
+          fileName: app.env
+          mountPath: /run/secrets
+      volumes:
+        - name: data
+          mountPath: /data
+          size: 5Gi

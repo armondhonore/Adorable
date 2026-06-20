@@ -1,6 +1,10 @@
-import { freestyle } from "freestyle-sandboxes";
+import { exec } from "child_process";
+import { promisify } from "util";
+import { readRepoMetadata, type RepoDeploymentSummary } from "./repo-storage";
 
-export const DEPLOYMENT_DOMAIN_SUFFIX = "adorable.style.dev";
+const execAsync = promisify(exec);
+
+export const DEPLOYMENT_DOMAIN_SUFFIX = "adorable.cloud.nexlayer.ai";
 
 export type DeploymentUiStatus = {
   state: "idle" | "deploying" | "live" | "failed";
@@ -25,13 +29,23 @@ export type DeploymentTimelineEntry = {
 const isBootstrapCommit = (message: string | undefined) =>
   (message ?? "").trim().toLowerCase() === "initial commit";
 
-export const getLatestCommitSha = async (repoId: string) => {
-  const repo = freestyle.git.repos.ref({ repoId });
-  const commits = await repo.commits.list({ limit: 50, order: "desc" });
-  const latestUserCommit = commits.commits.find(
-    (commit) => !isBootstrapCommit(commit.message),
-  );
-  return latestUserCommit?.sha ?? null;
+export const getLatestCommitSha = async (workspacePath: string) => {
+  try {
+    const { stdout } = await execAsync("git log --oneline -50", {
+      cwd: workspacePath,
+    });
+    const lines = stdout.trim().split("\n");
+    for (const line of lines) {
+      const sha = line.trim().split(" ")[0] ?? "";
+      const message = line.trim().slice(sha.length + 1);
+      if (!isBootstrapCommit(message) && /^[0-9a-f]{7,40}$/i.test(sha)) {
+        return sha;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
 };
 
 export const getDomainForCommit = (commitSha: string) => {
@@ -42,54 +56,31 @@ export const getDeploymentStatusForLatestCommit = async (
   repoId: string,
   isAgentRunning: boolean,
 ): Promise<DeploymentUiStatus> => {
-  const commitSha = await getLatestCommitSha(repoId);
   const updatedAt = new Date().toISOString();
+  const metadata = await readRepoMetadata(repoId);
 
-  if (!commitSha) {
+  if (!metadata || metadata.deployments.length === 0) {
     return {
       state: "idle",
       domain: null,
       url: null,
       commitSha: null,
       deploymentId: null,
-      lastError: "No commits found for repository.",
+      lastError: "No deployments found.",
       updatedAt,
     };
   }
 
-  const domain = getDomainForCommit(commitSha);
-  const { entries } = await freestyle.serverless.deployments.list({
-    limit: 200,
-  });
-
-  const match = entries.find((entry) => entry.domains.includes(domain));
-
-  if (!match) {
-    return {
-      state: isAgentRunning ? "deploying" : "idle",
-      domain,
-      url: `https://${domain}`,
-      commitSha,
-      deploymentId: null,
-      lastError: null,
-      updatedAt,
-    };
-  }
-
-  const state: DeploymentUiStatus["state"] =
-    match.state === "deployed"
-      ? "live"
-      : match.state === "failed"
-        ? "failed"
-        : "deploying";
+  const latest = metadata.deployments[0] as RepoDeploymentSummary;
+  const state = isAgentRunning && latest.state === "idle" ? "deploying" : latest.state;
 
   return {
     state,
-    domain,
-    url: `https://${domain}`,
-    commitSha,
-    deploymentId: match.deploymentId,
-    lastError: state === "failed" ? "Deployment reported failed state." : null,
+    domain: latest.domain,
+    url: latest.url,
+    commitSha: latest.commitSha,
+    deploymentId: latest.deploymentId,
+    lastError: latest.state === "failed" ? "Deployment failed." : null,
     updatedAt,
   };
 };
@@ -98,39 +89,15 @@ export const getDeploymentTimelineFromCommits = async (
   repoId: string,
   limit = 12,
 ): Promise<DeploymentTimelineEntry[]> => {
-  const repo = freestyle.git.repos.ref({ repoId });
-  const commits = await repo.commits.list({
-    limit: 50,
-    order: "desc",
-  });
-  const { entries } = await freestyle.serverless.deployments.list({
-    limit: 500,
-  });
-
-  const userCommits = commits.commits
-    .filter((commit) => !isBootstrapCommit(commit.message))
-    .slice(0, limit);
-
-  return userCommits.map((commit) => {
-    const domain = getDomainForCommit(commit.sha);
-    const match = entries.find((entry) => entry.domains.includes(domain));
-
-    const state: DeploymentTimelineEntry["state"] = !match
-      ? "idle"
-      : match.state === "deployed"
-        ? "live"
-        : match.state === "failed"
-          ? "failed"
-          : "deploying";
-
-    return {
-      commitSha: commit.sha,
-      commitMessage: commit.message,
-      commitDate: commit.author?.date ?? new Date().toISOString(),
-      domain,
-      url: `https://${domain}`,
-      deploymentId: match?.deploymentId ?? null,
-      state,
-    };
-  });
+  const metadata = await readRepoMetadata(repoId);
+  if (!metadata) return [];
+  return metadata.deployments.slice(0, limit).map((d) => ({
+    commitSha: d.commitSha,
+    commitMessage: d.commitMessage,
+    commitDate: d.commitDate,
+    domain: d.domain,
+    url: d.url,
+    deploymentId: d.deploymentId,
+    state: d.state,
+  }));
 };
