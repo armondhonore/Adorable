@@ -6,7 +6,7 @@ This file is the authoritative, pinned build solution for this repo. Nexlayer us
 
 1. **This is an npm workspace — NOT pnpm.** Do not use pnpm or corepack.
 
-2. **deps stage: `COPY adorable/package.json ./` then `RUN npm install --legacy-peer-deps`** — do NOT use `npm ci`; the lock file is intentionally not copied so new packages install correctly. Do NOT copy `package-lock.json` in the deps stage.
+2. **deps stage: `COPY adorable/package.json adorable/package-lock.json ./` then `RUN npm install --legacy-peer-deps`** — do NOT use `npm ci`. The lock file MUST be copied so that existing `@assistant-ui` packages install at their pinned versions (fresh resolution causes incompatible major version mismatches). `npm install --legacy-peer-deps` respects locked versions for existing packages and resolves fresh only for new packages.
 
 3. **`output: 'standalone'` is already set in `adorable/next.config.ts`** — do not add it again.
 
@@ -24,7 +24,7 @@ FROM mirror.gcr.io/library/node:22-alpine AS base
 FROM base AS deps
 RUN apk add --no-cache libc6-compat git
 WORKDIR /app
-COPY adorable/package.json ./
+COPY adorable/package.json adorable/package-lock.json ./
 RUN npm install --legacy-peer-deps
 
 FROM base AS builder
