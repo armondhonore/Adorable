@@ -2,7 +2,7 @@ application:
   name: adorable-ai
   pods:
     - name: app
-      image: "registry.nexlayer.io/user_01kece1xyh817dwff7wnarhkxd/adorable:19ee2c1ec27"
+      image: "registry.nexlayer.io/user_01kece1xyh817dwff7wnarhkxd/adorable:19ee2d8aac5"
       path: /
       servicePorts:
         - 3000
