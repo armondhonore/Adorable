@@ -12,7 +12,7 @@ This file is the authoritative, pinned build solution for this repo. Nexlayer us
 
 4. **No pnpm, no corepack, no workspace hoisting** — the adorable app builds cleanly from its own lockfile.
 
-5. **CMD must be `node server.js`** — Next.js standalone output produces `server.js` at the root of the standalone dir.
+5. **CMD must be `/bin/sh start.sh`** — `start.sh` sources `/run/secrets/app.env` (mounted secrets) as env vars then execs `node server.js`.
 
 ## Fixed Dockerfile
 
@@ -45,6 +45,8 @@ RUN mkdir -p public .next && chown nextjs:nodejs .next
 
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --chown=nextjs:nodejs start.sh ./
+RUN chmod +x start.sh
 
 USER nextjs
 
@@ -52,7 +54,7 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
-CMD ["node", "server.js"]
+CMD ["/bin/sh", "start.sh"]
 ```
 
 ## Fixed nexlayer.yaml
@@ -70,9 +72,15 @@ application:
         NODE_ENV: production
         PORT: "3000"
         LLM_PROVIDER: nexlayer
-        VLLM_BASE_URL: "# filled by platform agent"
         NEXLAYER_MODEL: bode-flagship
-        NEXLAYER_ACCESS_CODE: "FunDay"
+      secrets:
+        - name: app-secrets
+          data: |
+            VLLM_BASE_URL=# filled by platform agent
+            NEXLAYER_ACCESS_CODE=# filled by platform agent
+            FREESTYLE_API_KEY=# get from freestyle.sh dashboard
+          fileName: app.env
+          mountPath: /run/secrets
 ```
 
 ## Notes

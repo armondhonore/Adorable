@@ -10,7 +10,12 @@ application:
         NODE_ENV: production
         PORT: "3000"
         LLM_PROVIDER: nexlayer
-        VLLM_BASE_URL: "# filled by platform agent"
         NEXLAYER_MODEL: bode-flagship
-        NEXLAYER_ACCESS_CODE: "FunDay"
-        FREESTYLE_API_KEY: "# get from freestyle.sh dashboard"
+      secrets:
+        - name: app-secrets
+          data: |
+            VLLM_BASE_URL=# filled by platform agent
+            NEXLAYER_ACCESS_CODE=# filled by platform agent
+            FREESTYLE_API_KEY=# get from freestyle.sh dashboard
+          fileName: app.env
+          mountPath: /run/secrets
