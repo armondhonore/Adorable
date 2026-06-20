@@ -45,7 +45,7 @@ async function walkDir(
   depth = 0,
 ) {
   if (depth > 8) return;
-  let entries: fs.Dir;
+  let entries: Awaited<ReturnType<typeof fs.opendir>>;
   try {
     entries = await fs.opendir(dir);
   } catch {

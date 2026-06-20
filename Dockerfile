@@ -3,7 +3,7 @@ FROM mirror.gcr.io/library/node:22-alpine AS base
 FROM base AS deps
 RUN apk add --no-cache libc6-compat git
 WORKDIR /app
-COPY adorable/package.json ./
+COPY adorable/package.json adorable/package-lock.json ./
 RUN npm install --legacy-peer-deps
 
 FROM base AS builder
